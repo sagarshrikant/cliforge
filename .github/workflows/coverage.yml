@@ -1,0 +1,108 @@
+# =============================================================================
+# coverage.yml — lcov Coverage Report
+# =============================================================================
+# Runs on every push to main and on pull requests.
+# Generates an lcov report and posts a summary as a PR comment.
+#
+# The coverage badge in README.md is driven by the Coveralls/Codecov upload
+# step at the bottom — uncomment whichever service you sign up for.
+# =============================================================================
+
+name: Coverage
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  coverage:
+    name: Test Coverage (lcov)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build gcc g++ lcov
+
+      - name: Configure with coverage flags
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCLIFORGE_BUILD_TESTS=ON \
+            -DCMAKE_C_FLAGS="--coverage -O0" \
+            -DCMAKE_CXX_FLAGS="--coverage -O0" \
+            -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Zero coverage counters
+        run: lcov --zerocounters --directory build --quiet
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Capture coverage
+        run: |
+          lcov --capture \
+               --directory build \
+               --output-file coverage.info \
+               --rc lcov_branch_coverage=1 \
+               --quiet
+
+      - name: Filter out system headers and test code
+        run: |
+          lcov --remove coverage.info \
+               '*/googletest*' '*/usr/*' '*/_deps/*' '*/tests/*' '*/build/*' \
+               --output-file coverage_filtered.info \
+               --rc lcov_branch_coverage=1 \
+               --quiet
+
+      - name: Generate HTML report
+        run: |
+          genhtml coverage_filtered.info \
+                  --output-directory coverage_html \
+                  --branch-coverage \
+                  --quiet
+
+      - name: Upload HTML report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-report
+          path: coverage_html/
+          retention-days: 14
+
+      - name: Print coverage summary
+        run: |
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          lcov --summary coverage_filtered.info \
+               --rc lcov_branch_coverage=1 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ── Optional: upload to Coveralls ─────────────────────────────────────
+      # Sign up at https://coveralls.io and add COVERALLS_REPO_TOKEN to
+      # Settings → Secrets → Actions, then uncomment:
+      #
+      # - name: Upload to Coveralls
+      #   uses: coverallsapp/github-action@v2
+      #   with:
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     path-to-lcov: coverage_filtered.info
+
+      # ── Optional: upload to Codecov ───────────────────────────────────────
+      # Sign up at https://codecov.io, then uncomment:
+      #
+      # - name: Upload to Codecov
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     files: coverage_filtered.info
+      #     fail_ci_if_error: true

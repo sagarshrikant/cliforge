@@ -1,0 +1,141 @@
+# =============================================================================
+# release.yml — Package and Publish a Release
+# =============================================================================
+# Triggered only when you push a version tag: git tag v0.2.0 && git push --tags
+#
+# Pipeline:
+#   1. Build release binary
+#   2. Package as .deb (apt-installable) and .tar.gz (generic)
+#   3. Create a GitHub Release and upload both artefacts
+#
+# After this runs, users can:
+#   wget .../cliforge_0.2.0_amd64.deb && sudo dpkg -i cliforge_0.2.0_amd64.deb
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]*"   # matches v0.1.0, v1.2.3, v2.0.0-rc1
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write     # needed to create a GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed so cmake can read git describe for the version
+
+      - name: Parse version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"           # e.g. v0.2.0
+          VERSION="${TAG#v}"                 # strip leading 'v' → 0.2.0
+          echo "tag=$TAG"       >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build gcc g++ \
+            dpkg-dev fakeroot
+
+      - name: Configure (Release)
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCLIFORGE_VERSION=${{ steps.ver.outputs.version }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Install into staging directory
+        run: |
+          cmake --install build --prefix staging/usr
+
+      - name: Build .tar.gz
+        run: |
+          TAR="cliforge-${{ steps.ver.outputs.version }}-linux-x86_64.tar.gz"
+          tar -czf "$TAR" -C staging .
+          echo "tar_file=$TAR" >> $GITHUB_ENV
+
+      - name: Build .deb package
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          DEB="cliforge_${VERSION}_amd64.deb"
+
+          mkdir -p pkg/DEBIAN
+          mkdir -p pkg/usr/bin
+          mkdir -p pkg/usr/share/man/man1
+          mkdir -p pkg/usr/share/doc/cliforge
+
+          # Binary
+          cp staging/usr/bin/cliforge pkg/usr/bin/
+
+          # Man page (if present)
+          [ -f staging/usr/share/man/man1/cliforge.1.gz ] && \
+            cp staging/usr/share/man/man1/cliforge.1.gz pkg/usr/share/man/man1/ || true
+
+          # Copyright
+          cp LICENSE pkg/usr/share/doc/cliforge/copyright
+
+          # control file
+          cat > pkg/DEBIAN/control << CTRL
+          Package: cliforge
+          Version: ${VERSION}
+          Section: devel
+          Priority: optional
+          Architecture: amd64
+          Depends: libc6 (>= 2.17)
+          Maintainer: Shrikant Sagar <shrikant.sagar@gmail.com>
+          Description: CLI parser-generator for C89/C99/C11 projects
+           cliforge generates cmdline.c, cmdline.h, and cmdline.md from
+           declarative .cf schema files. Designed for embedded and systems
+           software with MISRA-C compatible output and static storage only.
+          CTRL
+
+          fakeroot dpkg-deb --build pkg "$DEB"
+          echo "deb_file=$DEB" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: "cliforge ${{ steps.ver.outputs.version }}"
+          body: |
+            ## cliforge ${{ steps.ver.outputs.version }}
+
+            ### Install (Debian/Ubuntu)
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.ver.outputs.tag }}/${{ env.deb_file }}
+            sudo dpkg -i ${{ env.deb_file }}
+            ```
+
+            ### Install (generic Linux)
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.ver.outputs.tag }}/${{ env.tar_file }}
+            tar -xzf ${{ env.tar_file }}
+            sudo cp usr/bin/cliforge /usr/local/bin/
+            ```
+
+            ### Build from source
+            ```bash
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake --build build
+            sudo cmake --install build
+            ```
+          files: |
+            ${{ env.deb_file }}
+            ${{ env.tar_file }}
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
