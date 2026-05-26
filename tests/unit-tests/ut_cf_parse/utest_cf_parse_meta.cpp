@@ -162,3 +162,29 @@ TEST(CfParseMeta, Description_006)
     ASSERT_EQ(parse_src(src, s.get()), 0);
     EXPECT_STREQ(s->meta.description, "Long form description.");
 }
+
+/* ---------------------------------------------------------------------------
+ * 007 — doc-title and i18n accept additional meta string fields.
+ * ------------------------------------------------------------------------- */
+TEST(CfParseMeta, DocTitleAndI18n_007)
+{
+    auto s = std::make_unique<cf_schema_file_t>();
+    std::memset(s.get(), 0, sizeof(*s));
+
+    const char *src =
+        "@schema 1\n"
+        "meta {\n"
+        "    app       = tool\n"
+        "    prefix    = T\n"
+        "    output    = cmdline\n"
+        "    doc-title = \"CLI Reference\"\n"
+        "    i18n      = en_US\n"
+        "}\n";
+
+    ASSERT_EQ(parse_src(src, s.get()), 0);
+    EXPECT_STREQ(s->meta.app, "tool");
+    EXPECT_STREQ(s->meta.prefix, "T");
+    EXPECT_STREQ(s->meta.output, "cmdline");
+    EXPECT_STREQ(s->meta.doc_title, "CLI Reference");
+    EXPECT_STREQ(s->meta.i18n, "en_US");
+}

@@ -252,3 +252,81 @@ TEST_F(CfLexTest, MinimalSchema_015)
     EXPECT_EQ(tok(0).type, CF_TOK_DIRECTIVE);
     EXPECT_TRUE(tok_text_eq(0, "@schema"));
 }
+
+/* ---------------------------------------------------------------------------
+ * 016 — Block comments and doc-block comments are tokenised distinctly.
+ * ------------------------------------------------------------------------- */
+TEST_F(CfLexTest, BlockComments_016)
+{
+    ASSERT_EQ(lex_src("/** doc */ /* plain */ value"), 0);
+    ASSERT_GE(lex.ntokens, 4u);
+    EXPECT_EQ(tok(0).type, CF_TOK_DOC_COMMENT);
+    EXPECT_EQ(tok(1).type, CF_TOK_COMMENT);
+    EXPECT_EQ(tok(2).type, CF_TOK_IDENT);
+    EXPECT_TRUE(tok_text_eq(2, "value"));
+}
+
+/* ---------------------------------------------------------------------------
+ * 017 — Numeric variants (hex/bin/oct/float/exponent/unit) are recognised.
+ * ------------------------------------------------------------------------- */
+TEST_F(CfLexTest, NumericVariants_017)
+{
+    const char *src = u8"0x2A 0b1010 0o77 1.5e-2 10us 5µs";
+    ASSERT_EQ(lex_src(src), 0);
+    ASSERT_GE(lex.ntokens, 7u);
+
+    EXPECT_EQ(tok(0).type, CF_TOK_NUMBER);
+    EXPECT_TRUE(tok_text_eq(0, "0x2A"));
+    EXPECT_EQ(tok(1).type, CF_TOK_NUMBER);
+    EXPECT_TRUE(tok_text_eq(1, "0b1010"));
+    EXPECT_EQ(tok(2).type, CF_TOK_NUMBER);
+    EXPECT_TRUE(tok_text_eq(2, "0o77"));
+    EXPECT_EQ(tok(3).type, CF_TOK_NUMBER);
+    EXPECT_TRUE(tok_text_eq(3, "1.5e-2"));
+    EXPECT_EQ(tok(4).type, CF_TOK_QUANTITY);
+    EXPECT_TRUE(tok_text_eq(4, "10us"));
+    EXPECT_EQ(tok(5).type, CF_TOK_QUANTITY);
+    EXPECT_TRUE(tok_text_eq(5, u8"5µs"));
+}
+
+/* ---------------------------------------------------------------------------
+ * 018 — Operators and invalid single-char forms produce the expected tokens.
+ * ------------------------------------------------------------------------- */
+TEST_F(CfLexTest, OperatorsAndInvalidSingles_018)
+{
+    ASSERT_EQ(lex_src("'x' '\\n' && || != ! . .. & | $"), 0);
+    ASSERT_GE(lex.ntokens, 11u);
+
+    EXPECT_EQ(tok(0).type, CF_TOK_CHAR);
+    EXPECT_EQ(tok(1).type, CF_TOK_CHAR);
+    EXPECT_EQ(tok(2).type, CF_TOK_AND);
+    EXPECT_EQ(tok(3).type, CF_TOK_OR);
+    EXPECT_EQ(tok(4).type, CF_TOK_NEQ);
+    EXPECT_EQ(tok(5).type, CF_TOK_NOT);
+    EXPECT_EQ(tok(6).type, CF_TOK_DOT);
+    EXPECT_EQ(tok(7).type, CF_TOK_RANGE);
+    EXPECT_EQ(tok(8).type, CF_TOK_INVALID);
+    EXPECT_EQ(tok(9).type, CF_TOK_INVALID);
+    EXPECT_EQ(tok(10).type, CF_TOK_INVALID);
+}
+
+/* ---------------------------------------------------------------------------
+ * 019 — Unterminated block comments become invalid tokens.
+ * ------------------------------------------------------------------------- */
+TEST_F(CfLexTest, UnterminatedBlockComment_019)
+{
+    ASSERT_EQ(lex_src("/* never closed"), 0);
+    ASSERT_GE(lex.ntokens, 2u);
+    EXPECT_EQ(tok(0).type, CF_TOK_INVALID);
+}
+
+/* ---------------------------------------------------------------------------
+ * 020 — Bare newlines inside strings produce invalid string tokens.
+ * ------------------------------------------------------------------------- */
+TEST_F(CfLexTest, InvalidStringNewline_020)
+{
+    ASSERT_EQ(lex_src("\"bad\nstring\""), 0);
+    ASSERT_GE(lex.ntokens, 3u);
+    EXPECT_EQ(tok(0).type, CF_TOK_INVALID);
+    EXPECT_EQ(tok(1).type, CF_TOK_IDENT);
+}

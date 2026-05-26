@@ -145,3 +145,28 @@ TEST(CfParseImport, LineNumber_005)
     ASSERT_EQ(s->nimports, 1u);
     EXPECT_EQ(s->imports[0].line, 2u);
 }
+
+/* ---------------------------------------------------------------------------
+ * 006 — ifnkey imports preserve condition key, operator, and value.
+ * ------------------------------------------------------------------------- */
+TEST(CfParseImport, ConditionalIfnkeyWithComparison_006)
+{
+    auto s = std::make_unique<cf_schema_file_t>();
+    std::memset(s.get(), 0, sizeof(*s));
+
+    const char *src =
+        "@schema 1\n"
+        "@import \"lib_http.cf\" as http ifnkey HTTP_MODE != disabled\n"
+        "meta {\n"
+        "    app    = \"tool\"\n"
+        "    prefix = \"T\"\n"
+        "    output = \"cmdline\"\n"
+        "}\n";
+
+    ASSERT_EQ(parse_src(src, s.get()), 0);
+    ASSERT_EQ(s->nimports, 1u);
+    EXPECT_EQ(s->imports[0].cond_kind, CF_IMPORT_COND_IFNKEY);
+    EXPECT_STREQ(s->imports[0].cond_key, "HTTP_MODE");
+    EXPECT_STREQ(s->imports[0].cond_op, "!=");
+    EXPECT_STREQ(s->imports[0].cond_val, "disabled");
+}
