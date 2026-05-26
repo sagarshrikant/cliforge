@@ -54,6 +54,7 @@ desktop.ini
 *.a
 *.so
 *.log
+*.venv
 
 # ----------------------------------------------------------------------------
 # UTest Agent generated output
@@ -63,4 +64,4 @@ utest_prepr_report.md
 *.gcda
 *.gcno
 
-
+tools/utest_agent/__pycache__/

@@ -4,24 +4,87 @@ AI-powered unit test advisor for cliforge. Analyses `git diff` output
 and lcov coverage data then suggests GTest additions, removals, and
 updates — using either the Claude API (cloud) or a local Ollama model.
 
+## Setup
+
+### Linux / WSL (Ubuntu 22.04+)
+
+```bash
+# Build tools and coverage support
+sudo apt install -y cmake ninja-build gcc g++ lcov python3 python3-pip
+
+# zstd is required by Ollama on Ubuntu — install it before setup_ollama.sh
+sudo apt install -y zstd
+
+# Python dependencies
+# Ubuntu 23.04+ protects system Python — use --break-system-packages
+# (safe on a dev machine / WSL where you own the environment)
+pip3 install --break-system-packages -r tools/utest_agent/requirements.txt
+```
+
+If you prefer an isolated Python environment instead:
+
+```bash
+python3 -m venv .venv          # may need: sudo apt install python3-venv
+source .venv/bin/activate
+pip install -r tools/utest_agent/requirements.txt
+# Re-run 'source .venv/bin/activate' at the start of each new terminal session
+```
+
+### macOS
+
+```bash
+brew install cmake ninja lcov python3
+pip3 install -r tools/utest_agent/requirements.txt
+```
+
+### Claude API key
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+# Make it permanent:
+echo 'export ANTHROPIC_API_KEY=sk-ant-...' >> ~/.bashrc
+```
+
+### Ollama (local, offline mode)
+
+```bash
+# One-time install — detects OS, pulls qwen2.5-coder:7b (~5 GB)
+bash tools/utest_agent/setup_ollama.sh
+```
+
+Ollama runs as a background service. On WSL it does not auto-start, so
+run this once per terminal session before using `--llm ollama`:
+
+```bash
+ollama serve > /tmp/ollama.log 2>&1 &
+```
+
+If you see `bind: address already in use`, Ollama is already running — no
+action needed. To verify:
+
+```bash
+curl -s http://localhost:11434/api/tags   # should return JSON with model list
+```
+
 ## Quick start
 
 ```bash
-# Install Python dependencies (once)
-pip install -r tools/utest_agent/requirements.txt
+# Fast path: analyse only what changed since HEAD (Claude)
+python3 tools/utest_agent/agent.py
 
-# Set Claude API key (if using Claude backend)
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Fast path: analyse only what changed since HEAD
-python tools/utest_agent/agent.py
+# Same, but with local Ollama (no API key needed)
+python3 tools/utest_agent/agent.py --llm ollama
 
 # Full pipeline: build → test → coverage → AI suggestions
-python tools/utest_agent/agent.py --with-build
+python3 tools/utest_agent/agent.py --with-build
 
-# Offline (no API key needed): use local Ollama
-python tools/utest_agent/agent.py --llm ollama --with-build
+# Save report to file
+python3 tools/utest_agent/agent.py --output utest_report.md
 ```
+
+> **WSL tip:** clone the repo into WSL's native filesystem (`~/dev/cliforge`)
+> rather than working from `/mnt/c/...`. The Windows↔Linux filesystem boundary
+> makes builds 5–10× slower and can break lcov coverage capture.
 
 ## Modes
 
