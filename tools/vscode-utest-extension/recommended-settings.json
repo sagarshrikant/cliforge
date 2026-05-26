@@ -1,0 +1,34 @@
+{
+    // Add these to your project's .vscode/settings.json
+    // They control the UTest Agent extension behaviour per-workspace
+    "utestAgent.llmBackend": "claude",
+    "utestAgent.ollamaModel": "qwen2.5-coder:7b",
+    "utestAgent.ollamaUrl": "http://localhost:11434",
+    "utestAgent.agentPath": "tools/utest_agent/agent.py",
+    "utestAgent.buildDir": "build",
+    "utestAgent.coverageDir": "coverage_report",
+    "utestAgent.pythonPath": "python3",
+    "utestAgent.autoRefreshStatusBar": true,
+
+    // Recommended companion extensions (install these from the marketplace):
+    //
+    // "Coverage Gutters" (ryanluker.vscode-coverage-gutters)
+    //   → Shows red/green lines inline in the editor from your .info file
+    //   → Zero config: it auto-detects coverage_report/coverage_filtered.info
+    //
+    // "clangd" (llvm-vs-code-extensions.vscode-clangd)
+    //   → Proper C IntelliSense — needed anyway for embedded C work
+
+    // Coverage Gutters config (if you install it)
+    "coverage-gutters.coverageFileNames": [
+        "coverage_filtered.info",
+        "coverage.info"
+    ],
+    "coverage-gutters.showLineCoverage": true,
+    "coverage-gutters.showRulerCoverage": true,
+    "coverage-gutters.showGutterCoverage": true,
+    "coverage-gutters.highlightdark": "rgba(161, 210, 161, 0.25)",
+    "coverage-gutters.highlightlight": "rgba(161, 210, 161, 0.25)",
+    "coverage-gutters.noHighlightDark": "rgba(215, 100, 100, 0.25)",
+    "coverage-gutters.noHighlightLight": "rgba(215, 100, 100, 0.25)"
+}

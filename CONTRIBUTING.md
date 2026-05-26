@@ -240,5 +240,5 @@ cliforge/
 │   ├── calctool/         # Canonical multi-library example
 │   └── reference/        # Feature-complete reference schemas
 ├── cmake/                # Helper CMake modules
-└── vscode-cliforge/      # VSCode syntax + hover extension for .cf files
+└── tools/vscode-schema-ext/  # VSCode syntax + LSP extension for .cf files
 ```

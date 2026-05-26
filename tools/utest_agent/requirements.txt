@@ -1,0 +1,8 @@
+# UTest Agent — Python dependencies
+# Install with:  pip install -r tools/utest_agent/requirements.txt
+
+# Anthropic Claude API client (required for --llm claude)
+anthropic>=0.40.0
+
+# HTTP client used by Ollama backend (required for --llm ollama)
+requests>=2.31.0

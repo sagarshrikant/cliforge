@@ -1,0 +1,117 @@
+{
+  "name": "cliforge-schema-ext",
+  "displayName": "cliforge",
+  "description": "Language support for cliforge schema files (.cf) \u2014 syntax highlighting, validation, completion, hover, and go-to-definition.",
+  "version": "0.1.0",
+  "publisher": "shrikant-sagar",
+  "license": "MIT",
+  "author": {
+    "name": "Shrikant Sagar"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shrikant-sagar/cliforge"
+  },
+  "bugs": {
+    "url": "https://github.com/shrikant-sagar/cliforge/issues"
+  },
+  "homepage": "https://github.com/shrikant-sagar/cliforge#readme",
+  "engines": {
+    "vscode": "^1.84.0",
+    "node": ">=18"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "cliforge",
+    "cf",
+    "command-line",
+    "gengetopt",
+    "code-generator",
+    "schema"
+  ],
+  "main": "./out/client/extension.js",
+  "activationEvents": [
+    "onLanguage:cliforge"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cliforge",
+        "aliases": [
+          "cliforge",
+          "CLIforge schema"
+        ],
+        "extensions": [
+          ".cf"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./media/file-icon-light.svg",
+          "dark": "./media/file-icon-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cliforge",
+        "scopeName": "source.cliforge",
+        "path": "./syntaxes/cliforge.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "cliforge",
+        "path": "./snippets/cliforge.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "cliforge",
+      "properties": {
+        "cliforge.validation.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable schema validation diagnostics."
+        },
+        "cliforge.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace messages between VS Code and the cliforge language server."
+        },
+        "cliforge.imports.followAcrossFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "When resolving @import declarations, follow them across the workspace to collect symbols for completion and go-to-definition."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "tsc --noEmit",
+    "package": "npx --yes @vscode/vsce@2.15.0 package",
+    "publish": "npx --yes @vscode/vsce@2.15.0 publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11",
+    "vscode-uri": "^3.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "18.19.50",
+    "@types/vscode": "1.84.0",
+    "typescript": "5.6.3"
+  }
+}

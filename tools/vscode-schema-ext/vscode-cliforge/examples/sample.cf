@@ -1,0 +1,208 @@
+@schema cliforge v1
+
+/*!
+ *  sample.cf — cliforge VS Code extension showcase
+ *
+ *  Open this file with the extension active to see:
+ *    - Syntax highlighting on keywords, types, quantities, and doc-comments
+ *    - Hover documentation (try hovering over 'duration', 'visible', '@import')
+ *    - Completion inside option { } and meta { } blocks
+ *    - Outline view listing every section, option, and named type declaration
+ *    - Conditional blocks (ifdef, ifkey) highlighted distinctly
+ */
+
+meta {
+  app         = "demo"
+  brief       = "Tiny demo of the cliforge schema language"
+  version     = "0.1.0"
+  author      = "Your Name"
+  prefix      = "demo"
+  output      = "cmdline"
+  doc-title   = "demo Command-line Reference"
+  description = "Showcases every major cliforge v1 syntax feature."
+}
+
+@import "libnet.cf" as net
+@import "libm.cf"   as libm   ifkey have-libm
+
+/* ------------------------------------------------------------------ */
+/*  Named type declarations                                             */
+/* ------------------------------------------------------------------ */
+
+/* Named choice type — language-neutral (no 'enum' keyword required). */
+sched-class = (fifo, rr, other)
+
+/* Named compound type — language-neutral (no 'struct' keyword).       */
+endpoint = {
+  host : string(length=64),
+  port : uint16
+}
+
+/* ------------------------------------------------------------------ */
+section "Server" {
+  description = "Network binding configuration."
+
+  option bind-addr {
+    short    = 'b'
+    type     = string(length=64)
+    default  = "0.0.0.0"
+    help     = "Address to bind the listening socket."
+  }
+
+  option port {
+    short    = 'P'
+    type     = uint16 in 1024..65535
+    default  = 8080
+    help     = "TCP port to listen on."
+    details  = "Values below 1024 require CAP_NET_BIND_SERVICE on Linux."
+    since    = "0.1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Workers" {
+  description = "Worker pool configuration."
+
+  /* Named choice type declared inside a section for visual proximity. */
+  log-level = (quiet, normal, verbose, debug)
+
+  option level {
+    type     = log-level
+    default  = "normal"
+    required = optional
+    help     = "Log verbosity level."
+  }
+
+  /*!
+   *  Per-worker configuration record. Repeat for additional pools.
+   */
+  option worker {
+    type = {
+      name   : string(length=32),
+      sched  : sched-class,
+      prio   : uint8 in 1..99,
+      period : duration,
+      stack  : bytes
+    }
+    multiple = 4
+    help     = "Configure a worker-pool entry."
+    example  = "--worker name=io,sched=fifo,prio=80,period=10ms,stack=64KiB"
+    since    = "0.1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Remote" {
+  description = "Optional remote control-plane endpoint."
+
+  option server {
+    type       = endpoint
+    required   = optional
+    help       = "Remote server address and port."
+    example    = "--server host=control.example.com,port=9000"
+  }
+
+  option api-token {
+    type      = string
+    required  = optional
+    sensitive = true
+    help      = "API authentication token (masked in logs and dumps)."
+  }
+
+  option timeout {
+    type         = duration
+    default      = "500 ms"
+    display-unit = "ms"
+    required     = optional
+    help         = "Per-request socket timeout."
+    visible      = detail
+    since        = "0.1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Build-time conditional section (CFLAGS / CPPFLAGS)                 */
+/* ------------------------------------------------------------------ */
+ifdef ENABLE_TLS {
+  section "TLS" {
+    description = "TLS wrapping for the control-plane channel."
+
+    option tls-cert {
+      type     = file
+      required = optional
+      help     = "Path to the PEM-encoded TLS certificate."
+    }
+
+    option tls-key {
+      type       = file
+      required   = optional
+      depends-on = tls-cert
+      sensitive  = true
+      help       = "Path to the PEM-encoded private key."
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Key-words conditional section (--key-words=)                       */
+/* ------------------------------------------------------------------ */
+ifkey dev-mode {
+  section "Debug" {
+    description = "Developer diagnostics (active when --key-words=dev-mode)."
+
+    option inject-error-rate {
+      type     = ratio
+      default  = "0.0"
+      required = optional
+      visible  = never
+    }
+
+    option trace {
+      type     = flag
+      required = optional
+      visible  = detail
+      help     = "Emit a one-line trace for each request processed."
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Variant-keyed default                                               */
+/* ------------------------------------------------------------------ */
+option logfile {
+  type    = path
+  default = {
+    ifdef LINUX_BUILD   : "/var/log/demo.log"
+    ifdef QNX_BUILD     : "/fs/log/demo.log"
+    default             : "./demo.log"
+  }
+  help    = "Log output file path."
+}
+
+/* ------------------------------------------------------------------ */
+/*  Exactly-one group (mandatory)                                       */
+/* ------------------------------------------------------------------ */
+option stdout-log {
+  type    = flag
+  default = "true"
+  help    = "Write log output to stdout."
+}
+
+option file-log {
+  type    = flag
+  default = "false"
+  help    = "Write log output to --logfile."
+}
+
+group log-sink {
+  options   = [ stdout-log, file-log ]
+  mandatory
+}
+
+/* ------------------------------------------------------------------ */
+/*  Deprecated option                                                   */
+/* ------------------------------------------------------------------ */
+option verbose {
+  type       = flag
+  deprecated = "Use --level verbose instead (deprecated since 0.2.0)."
+}

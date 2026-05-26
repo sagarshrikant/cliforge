@@ -1,0 +1,156 @@
+{
+  "name": "utest-agent",
+  "displayName": "UTest Agent",
+  "description": "AI-powered GTest unit test advisor with lcov coverage integration",
+  "version": "1.0.0",
+  "publisher": "gliwa",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Testing"],
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "workspaceContains:tools/utest_agent/agent.py"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "utest.analyzeChanges",
+        "title": "UTest: Analyze Changed Files",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "utest.analyzeChangesOllama",
+        "title": "UTest: Analyze Changed Files (Ollama)",
+        "icon": "$(home)"
+      },
+      {
+        "command": "utest.fullPipeline",
+        "title": "UTest: Full Pipeline (Build + Test + Coverage)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "utest.fullPipelineOllama",
+        "title": "UTest: Full Pipeline (Ollama local)",
+        "icon": "$(home)"
+      },
+      {
+        "command": "utest.analyzeCurrentFile",
+        "title": "UTest: Analyze Current File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "utest.scanCurrentFile",
+        "title": "UTest: Full Coverage Scan (Current File)",
+        "icon": "$(search)"
+      },
+      {
+        "command": "utest.reCoverageOnly",
+        "title": "UTest: Re-analyze Coverage (No Rebuild)",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "utest.prePrCheck",
+        "title": "UTest: Pre-PR Gate Check",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "utest.openHtmlReport",
+        "title": "UTest: Open Coverage HTML Report",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "utest.showReport",
+        "title": "UTest: Show Last Report Panel",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "utest.listModels",
+        "title": "UTest: List Recommended Ollama Models"
+      }
+    ],
+    "configuration": {
+      "title": "UTest Agent",
+      "properties": {
+        "utestAgent.llmBackend": {
+          "type": "string",
+          "default": "claude",
+          "enum": ["claude", "ollama"],
+          "description": "LLM backend to use for analysis"
+        },
+        "utestAgent.ollamaModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "description": "Ollama model to use when backend is 'ollama'"
+        },
+        "utestAgent.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server URL"
+        },
+        "utestAgent.agentPath": {
+          "type": "string",
+          "default": "tools/utest_agent/agent.py",
+          "description": "Path to agent.py relative to workspace root"
+        },
+        "utestAgent.buildDir": {
+          "type": "string",
+          "default": "build",
+          "description": "CMake build directory name"
+        },
+        "utestAgent.coverageDir": {
+          "type": "string",
+          "default": "coverage_report",
+          "description": "lcov output directory"
+        },
+        "utestAgent.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Python executable (python3 or full path)"
+        },
+        "utestAgent.autoRefreshStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-refresh coverage % in status bar when .info file changes"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceLangId == c || resourceLangId == cpp",
+          "command": "utest.analyzeCurrentFile",
+          "group": "utest@1"
+        },
+        {
+          "when": "resourceLangId == c || resourceLangId == cpp",
+          "command": "utest.scanCurrentFile",
+          "group": "utest@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceLangId == c",
+          "command": "utest.analyzeCurrentFile",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "utest.analyzeChanges",
+        "key": "ctrl+shift+u",
+        "when": "editorLangId == c || editorLangId == cpp"
+      },
+      {
+        "command": "utest.analyzeCurrentFile",
+        "key": "ctrl+shift+alt+u",
+        "when": "editorLangId == c || editorLangId == cpp"
+      },
+      {
+        "command": "utest.prePrCheck",
+        "key": "ctrl+shift+alt+p",
+        "when": "editorLangId == c || editorLangId == cpp"
+      }
+    ]
+  }
+}

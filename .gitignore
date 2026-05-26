@@ -27,9 +27,9 @@ _CPack_Packages/
 # ----------------------------------------------------------------------------
 # VSCode extension
 # ----------------------------------------------------------------------------
-vscode-cliforge/node_modules/
-vscode-cliforge/out/
-vscode-cliforge/*.vsix
+tools/vscode-schema-ext/node_modules/
+tools/vscode-schema-ext/out/
+tools/vscode-schema-ext/*.vsix
 
 # ----------------------------------------------------------------------------
 # Editor / IDE
@@ -54,3 +54,13 @@ desktop.ini
 *.a
 *.so
 *.log
+
+# ----------------------------------------------------------------------------
+# UTest Agent generated output
+# ----------------------------------------------------------------------------
+coverage_report/
+utest_prepr_report.md
+*.gcda
+*.gcno
+
+

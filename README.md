@@ -49,7 +49,7 @@ Key capabilities beyond traditional parser generators:
   integration.
 
 - **VSCode extension.** Syntax highlighting, hover docs, and schema validation
-  for `.cf` files — see [`vscode-cliforge/`](vscode-cliforge/).
+  for `.cf` files — see [`tools/vscode-schema-ext/`](tools/vscode-schema-ext/).
 
 ---
 
@@ -208,7 +208,7 @@ cliforge/
 ├── examples/
 │   ├── calctool/        # Canonical multi-library example
 │   └── reference/       # Feature-complete reference schemas
-└── vscode-cliforge/     # VSCode extension for .cf files
+├── tools/vscode-schema-ext/  # VSCode extension for .cf schema files
 ```
 
 ---
