@@ -938,7 +938,15 @@ static unsigned int c_str_escape(char *dst, unsigned int dstsz, const char *src)
 }
 
 /* Build the "(default: VALUE)" suffix for a help line.
- * Returns an empty string when there is nothing useful to show. */
+ * Returns an empty string when there is nothing useful to show.
+ *
+ * %.*s with an explicit precision is used for the string and numeric
+ * branches so that GCC can statically verify the output fits in buf
+ * (-Wformat-truncation).  The precision is computed from bufsz minus the
+ * fixed overhead of each format literal:
+ *   "  [default: \"...\"]"  overhead = 16  (13 prefix + 2 suffix + NUL)
+ *   "  [default: ...]"      overhead = 14  (12 prefix + 1 suffix + NUL)
+ * Truncation of long default values in --help output is intentional. */
 static void fmt_help_default(char *buf, unsigned int bufsz,
                               const cf_option_t *opt,
                               const cf_type_expr_t *expr)
@@ -947,17 +955,28 @@ static void fmt_help_default(char *buf, unsigned int bufsz,
     if (val[0] == '\0') { buf[0] = '\0'; return; }
 
     if (expr->base == CF_TYPE_FLAG || expr->base == CF_TYPE_BOOL) {
+        /* "on" / "off" are at most 3 bytes — no truncation possible. */
         const char *v = (val[0] == '0' || strcmp(val, "false") == 0)
                         ? "off" : "on";
         (void)snprintf(buf, (size_t)bufsz, "  [default: %s]", v);
     } else if (expr->base == CF_TYPE_STRING || expr->base == CF_TYPE_PATH ||
                expr->base == CF_TYPE_FILE   || expr->base == CF_TYPE_DIR) {
+        /* Overhead of '  [default: ""]' = 16 bytes (incl. NUL). */
+        static const unsigned int STR_OVERHEAD = 16U;
+        int maxcontent;
         char esc[256];
         if (val[0] == '\0') { buf[0] = '\0'; return; }
         c_str_escape(esc, sizeof(esc), val);
-        (void)snprintf(buf, (size_t)bufsz, "  [default: \"%s\"]", esc);
+        maxcontent = (bufsz > STR_OVERHEAD) ? (int)(bufsz - STR_OVERHEAD) : 0;
+        (void)snprintf(buf, (size_t)bufsz, "  [default: \"%.*s\"]",
+                       maxcontent, esc);
     } else {
-        (void)snprintf(buf, (size_t)bufsz, "  [default: %s]", val);
+        /* Overhead of '  [default: ]' = 14 bytes (incl. NUL). */
+        static const unsigned int NUM_OVERHEAD = 14U;
+        int maxcontent;
+        maxcontent = (bufsz > NUM_OVERHEAD) ? (int)(bufsz - NUM_OVERHEAD) : 0;
+        (void)snprintf(buf, (size_t)bufsz, "  [default: %.*s]",
+                       maxcontent, val);
     }
 }
 

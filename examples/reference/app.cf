@@ -173,7 +173,7 @@ section "Output" {
     short    = 'o'
     default  = {
       ifdef  LINUX_BUILD : "/var/log/netmon.pcap"
-      ifdef  QNX_BUILD   : "/fs/log/netmon.pcap"
+      ifdef  RTOS_BUILD   : "/fs/log/netmon.pcap"
       default            : "./netmon.pcap"
     }
     required = optional
@@ -284,11 +284,11 @@ section "Logging" {
 }
 
 // ---------------------------------------------------------------------------
-//  Section: Threading  (Linux / QNX only)
+//  Section: Threading  (Linux / RTOS targets)
 // ---------------------------------------------------------------------------
 
 section "Threading" {
-  ifdef LINUX_BUILD || QNX_BUILD
+  ifdef LINUX_BUILD || RTOS_BUILD
   description = "Worker thread pool configuration."
 
   // Named choice types — declared here for immediate visibility

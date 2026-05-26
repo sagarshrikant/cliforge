@@ -256,7 +256,7 @@
       "  type    = path",
       "  default = {",
       "    ifdef ${2:LINUX_BUILD}   : \"${3:/var/log/app.log}\"",
-      "    ifdef ${4:QNX_BUILD}     : \"${5:/fs/log/app.log}\"",
+      "    ifdef ${4:RTOS_BUILD}     : \"${5:/fs/log/app.log}\"",
       "    default                  : \"${6:./app.log}\"",
       "  }",
       "  help = \"${7:Log output file path.}\"",

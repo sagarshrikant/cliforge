@@ -173,7 +173,7 @@ option logfile {
   type    = path
   default = {
     ifdef LINUX_BUILD   : "/var/log/demo.log"
-    ifdef QNX_BUILD     : "/fs/log/demo.log"
+    ifdef RTOS_BUILD     : "/fs/log/demo.log"
     default             : "./demo.log"
   }
   help    = "Log output file path."

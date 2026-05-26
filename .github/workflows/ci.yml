@@ -5,7 +5,7 @@
 # Think of this as the mandatory quality gate: nothing merges without a green build.
 #
 # Matrix: tests against GCC on Ubuntu 22.04 (primary target).
-# Add more matrix entries later for clang or QNX cross-compile if needed.
+# Add more matrix entries later for clang or RTOS/embedded cross-compile if needed.
 # =============================================================================
 
 name: CI

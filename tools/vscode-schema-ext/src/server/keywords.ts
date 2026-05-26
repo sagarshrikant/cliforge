@@ -185,7 +185,7 @@ export const KEYWORD_DOCS: Record<string, string> = {
     "subcommand": "**Subcommand block.** Git-style nested option surface (e.g. `tool eval ...`, `tool bench ...`). The first non-option argv element selects the subcommand.",
     "positional": "**Positional argument block.** Declares order and type of positional argv values. Use `multiple = N` or `multiple = min..max` for variadic positions.",
 
-    "ifdef":  "**Build-time conditional block.** Content is included only when the symbol is defined in `CFLAGS`/`CPPFLAGS`. Supports `||` and `&&`.\n\n```\nifdef LINUX_BUILD { ... }\nifdef LINUX_BUILD || QNX_BUILD { ... }\n```",
+    "ifdef":  "**Build-time conditional block.** Content is included only when the symbol is defined in `CFLAGS`/`CPPFLAGS`. Supports `||` and `&&`.\n\n```\nifdef LINUX_BUILD { ... }\nifdef LINUX_BUILD || RTOS_BUILD { ... }\n```",
     "ifndef": "**Build-time conditional block.** Inverse of `ifdef` — content included when the symbol is *not* defined.\n\n```\nifndef EMBEDDED { ... }\n```",
     "ifkey":  "**Key-words conditional block.** Content included when the key (and optional value) appears in `--key-words=...`.\n\n```\nifkey have-trig { ... }\nifkey board == rpi4 { ... }\n```",
     "ifnkey": "**Key-words conditional block.** Inverse of `ifkey` — content included when the key is *not* in `--key-words=...`.",

@@ -102,7 +102,7 @@ export interface ConditionalBlock extends NodeBase {
     kind: "ConditionalBlock";
     /** "ifdef" | "ifndef" | "ifkey" | "ifnkey" */
     keyword: string;
-    /** For ifdef/ifndef: space-separated symbol expression (e.g. "LINUX_BUILD || QNX_BUILD"). */
+    /** For ifdef/ifndef: space-separated symbol expression (e.g. "LINUX_BUILD || RTOS_BUILD"). */
     symbolExpr?: string;
     /** For ifkey/ifnkey: the key name. */
     keyName?: string;
