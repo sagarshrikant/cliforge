@@ -1,0 +1,15 @@
+@schema 1
+
+@import "this_file_does_not_exist.cf" as ghost
+
+# ERROR: schema is also structurally broken — meta block unclosed.
+# The import failure prints a warning but exits 0; the parse error
+# ensures we get a non-zero exit code.
+meta {
+  prefix = "bim"
+  output = "cmdline_bim"
+
+option value {
+  type = uint32
+  help = "Schema is broken at two levels."
+}

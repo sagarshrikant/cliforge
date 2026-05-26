@@ -1,0 +1,39 @@
+@schema cliforge v1
+
+/*!
+ *  cmp — comparison operators for calctool.
+ *  Statically linked.
+ *  Surfaced under --cmp.* via: @import "lib/cmp.cf" as cmp
+ */
+
+meta {
+  app         = "cmp"
+  brief       = "Comparison operators (<, >, ==, !=, <=, >=)"
+  prefix      = "cmp"
+  output      = "cmdline_cmp"
+  doc-title   = "cmp Library Options"
+  description = "Options controlling floating-point comparison behaviour."
+}
+
+section "Comparison" {
+  description = "Floating-point comparison parameters."
+
+  option epsilon {
+    type     = double in 0.0..1.0
+    default  = 1.0e-12
+    required = optional
+    help     = "Floating-point comparison tolerance."
+    note     = "Distinct from arith.epsilon; applies only to ==, !=, <=, >= operators."
+  }
+
+  option nan-equal {
+    type     = bool
+    default  = false
+    required = optional
+    help     = "Treat NaN as equal to itself for the == operator."
+    details  = "\
+      IEEE 754 defines NaN != NaN. Set this to true for applications \
+      that need reflexive equality on all float values. \
+    "
+  }
+}

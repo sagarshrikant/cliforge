@@ -1,0 +1,13 @@
+@schema 1
+
+meta {
+  prefix = "dup"
+  output = "cmdline_dup"
+}
+
+# ERROR: schema truncated mid-option (EOF inside option block).
+# TODO: once the parser detects duplicate option names, use two options
+#       with the same name as the error trigger.
+option verbose {
+  type = flag
+  help = "Truncated

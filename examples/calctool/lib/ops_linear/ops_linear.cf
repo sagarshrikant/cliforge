@@ -1,0 +1,80 @@
+@schema cliforge v1
+
+/*!
+ *  ops_linear.cf — Linear-algebra operator plugin for calctool.
+ *
+ *  DLOPEN PLUGIN — discovered and loaded at runtime via --plugin.
+ *  The plugin binary exports a single C symbol:
+ *
+ *      int ops_linear_init(int argc, char **argv,
+ *                          ops_linear_api_t *api_out);
+ *
+ *  calctool calls dlopen() on the plugin .so, locates that symbol via
+ *  dlsym(), builds a filtered argc/argv from the --plugin options that
+ *  were associated with this plugin, then calls ops_linear_init().
+ *
+ *  ops_linear_init() calls the cliforge-generated ops_linear_cmdline_parse()
+ *  to populate its private options and then fills api_out with function
+ *  pointers the host can call.
+ *
+ *  Schema convention for plugins:
+ *   • meta.app  — used as the display name in --help and errors.
+ *   • meta.prefix — prefix for all generated C symbols (avoid collisions).
+ *   • Options do NOT include "path" or "name"; those are host-side
+ *     concerns handled by calctool's --plugin compound option.
+ */
+
+meta {
+  app         = "ops_linear"
+  brief       = "Linear-algebra operator plugin (dot, norm, mat-vec)"
+  prefix      = "ol"
+  output      = "cmdline_ops_linear"
+  version     = "0.1.0"
+  doc-title   = "ops_linear Plugin Options"
+  description = "\
+    Plugin providing dot-product, vector-norm, and matrix-vector multiply \
+    operators to calctool.  Loaded at runtime via --plugin. \
+  "
+}
+
+backend-type = (naive, blas)
+
+section "Computation" {
+  description = "Numerical backend and precision settings."
+
+  option precision {
+    type     = uint8 in 1..15
+    short    = '-'
+    default  = 10
+    required = optional
+    help     = "Decimal digits of precision for intermediate accumulation."
+  }
+
+  option backend {
+    type     = backend-type
+    short    = '-'
+    default  = naive
+    required = optional
+    help     = "Computation backend: naive (portable C) or blas (requires BLAS at runtime)."
+  }
+}
+
+section "Cache" {
+  description = "Optional result-cache settings."
+
+  option cache-size {
+    type     = bytes in 0..512MiB
+    short    = '-'
+    default  = 0
+    required = optional
+    help     = "Size of the LRU result cache (0 = disabled)."
+  }
+
+  option cache-ttl {
+    type     = duration in 0ms..60s
+    short    = '-'
+    default  = 0ms
+    required = optional
+    help     = "Cache entry lifetime (0 = never evict)."
+  }
+}

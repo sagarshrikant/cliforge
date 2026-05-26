@@ -1,0 +1,726 @@
+@schema cliforge v1
+
+/*!
+ *  calctool — plugin-capable command-line expression evaluator
+ *
+ *  COMPREHENSIVE REFERENCE: exercises every cliforge v1 feature in one
+ *  realistic schema. Inline [feature: ...] comments mark each feature.
+ *
+ *  Type coverage
+ *  ─────────────
+ *  Primitives : sint8  sint16  sint32  sint64
+ *               uint8  uint16  uint32  uint64
+ *               float  double  bool  flag
+ *               string  path  file  dir
+ *  Quantities : duration  bytes  frequency  ratio
+ *  Composite  : named choice, named compound,
+ *               inline anonymous choice, inline compound
+ *
+ *  Conditional coverage
+ *  ────────────────────
+ *  ifdef / ifndef   — build-time via CFLAGS -DSYMBOL
+ *  ifkey / ifnkey   — build-time via --key-words= list
+ *  Used as: top-level blocks, section qualifiers, option qualifiers,
+ *           variant-default arms, allowed-block arms, @import guards
+ *
+ *  Qualifier coverage (all option qualifiers shown at least once)
+ *  ───────────────────────────────────────────────────────────────
+ *  type  short  default  required  visible  multiple  unique
+ *  alias  depends-on  conflicts  allowed  sensitive  deprecated
+ *  display-unit  help  details  note  example  since
+ *
+ *  Structural coverage
+ *  ───────────────────
+ *  meta  @import  section  group  subcommand  positional
+ *  group with mandatory, group advisory (no mandatory)
+ *  deprecated subcommand
+ *
+ *  Library composition:
+ *    arith  — static archive, always linked
+ *    cmp    — static archive, always linked
+ *    trig   — shared library, conditional (ifkey have-trig)
+ *    stats  — shared library, conditional (ifnkey no-stats)
+ *    plugins — user .so files loaded at runtime via dlopen (NOT @imported)
+ */
+
+// ============================================================
+//  Meta block   [feature: all meta keys]
+// ============================================================
+
+meta {
+  app         = "calctool"
+  brief       = "Plugin-capable expression evaluator"
+  version     = "0.2.0"
+  author      = "Your Name"
+  prefix      = "cc"
+  output      = "cmdline"
+  i18n        = "po/"
+  doc-title   = "calctool Command-line Reference"
+  description = "\
+    calctool evaluates mathematical expressions from the command line. \
+    It supports a plugin system for user-supplied operator packs loaded \
+    as shared objects at runtime. \
+  "
+}
+
+// ============================================================
+//  @import directives
+//  [feature: @import ... as ALIAS]          always-present
+//  [feature: @import ... as ALIAS ifkey]    conditional on key present
+//  [feature: @import ... as ALIAS ifnkey]   conditional on key absent
+// ============================================================
+
+@import "lib/arith/arith.cf"  as arith                     // always present
+@import "lib/cmp/cmp.cf"    as cmp                       // always present
+@import "lib/trig/trig.cf"   as trig   ifkey  have-trig   // [feature: @import ifkey]
+@import "lib/stats/stats.cf"  as stats  ifnkey no-stats    // [feature: @import ifnkey]
+
+// ============================================================
+//  Named choice types   [feature: named choice = (A, B, C)]
+// ============================================================
+
+verbosity  = (quiet, normal, verbose, trace)
+eval-mode  = (integer, real, complex)
+output-fmt = (text, json, csv, binary)
+sched-pol  = (SCHED_OTHER, SCHED_FIFO, SCHED_RR)
+
+// ============================================================
+//  Named compound type   [feature: named compound = { field: type }]
+//  Fields span: file(length=N), string(length=N), uint8
+// ============================================================
+
+plugin-spec = {
+  path     : file(length=256)
+  name     : string(length=32)   = "unnamed"
+  priority : uint8               = 100
+}
+
+// ============================================================
+//  Top-level ifdef block   [feature: ifdef SYMBOL { ... }]
+// ============================================================
+
+ifdef EMBED_CRYPTO {
+  /// Crypto-key option — compiled only when -DEMBED_CRYPTO is set.
+  option crypto-key {
+    type      = string(length=64)
+    short     = '-'
+    sensitive = true                         // [feature: sensitive]
+    required  = optional
+    help      = "AES-256 key for encrypting output (hex string, 64 chars)."
+    note      = "Replaced with *** in --dump and audit output."
+    since     = "0.2.0"                      // [feature: since]
+  }
+}
+
+// ============================================================
+//  Top-level ifndef block   [feature: ifndef SYMBOL { ... }]
+// ============================================================
+
+ifndef MINIMAL_BUILD {
+  /// Extended precision — omitted in minimal builds.
+  option extended-precision {
+    type     = bool
+    short    = '-'
+    default  = false
+    required = optional
+    visible  = detail                        // [feature: visible = detail]
+    help     = "Enable 80-bit extended-precision mode (x87)."
+  }
+}
+
+// ============================================================
+//  Top-level ifkey block   [feature: ifkey KEY { ... }]
+// ============================================================
+
+ifkey have-trig {
+  /// Angle unit — present only when trig library is enabled.
+  option angle-unit {
+    type     = (degrees, radians, gradians)  // [feature: inline anonymous choice]
+    short    = 'a'
+    default  = radians
+    required = optional
+    help     = "Angle unit for trigonometric functions."
+    allowed {                                // [feature: allowed block, ifkey arm]
+      ifkey board == rpi4  : (degrees, radians)
+      default              : (degrees, radians, gradians)
+    }
+  }
+}
+
+// ============================================================
+//  Top-level ifnkey block   [feature: ifnkey KEY { ... }]
+// ============================================================
+
+ifnkey release {
+  /// Bytecode dump — dev builds only, never shown in help.
+  option debug-asm {
+    type     = flag                          // [feature: flag type]
+    short    = '-'
+    required = optional
+    visible  = never                         // [feature: visible = never]
+    help     = "Dump generated bytecode assembly to stderr."
+  }
+}
+
+// ============================================================
+//  Section: General
+// ============================================================
+
+section "General" {
+  description = "\
+    Core evaluation settings. Apply globally across all subcommands \
+    unless a subcommand overrides them locally. \
+  "
+
+  /// uint8 in range   [feature: uint8, in M..N range constraint]
+  option precision {
+    type     = uint8 in 1..40
+    short    = 'p'
+    default  = 12
+    required = optional
+    help     = "Decimal precision used internally by the evaluator."
+    details  = "Values above 24 are rarely needed for general use."  // [feature: details]
+    example  = "calctool --precision 24 eval '1/3'"                  // [feature: example]
+    since    = "0.1.0"
+  }
+
+  /// Named choice reference   [feature: eval-mode choice type reference]
+  option mode {
+    type     = eval-mode
+    short    = 'm'
+    default  = real
+    required = optional
+    help     = "Top-level evaluation mode (integer, real, or complex)."
+    example  = "calctool --mode integer eval '7 / 2'"
+  }
+
+  /// Named choice + variant default   [feature: variant default with ifdef, ifkey, default arms]
+  option verbosity {
+    type    = verbosity
+    short   = 'v'
+    default = {
+      ifdef  LINUX_BUILD   : verbose   // [feature: variant default, ifdef arm]
+      ifkey  board == rpi4 : quiet     // [feature: variant default, ifkey arm]
+      default              : normal    // [feature: variant default, default arm]
+    }
+    required = optional
+    help     = "Verbosity level."
+  }
+
+  /// file type + variant default   [feature: file type]
+  option logfile {
+    type     = file
+    short    = 'l'
+    default  = {
+      ifdef  LINUX_BUILD : "/var/log/calctool.log"
+      default            : "./calctool.log"
+    }
+    required = optional
+    help     = "Log file path."
+  }
+
+  /// dir type   [feature: dir type]
+  option work-dir {
+    type     = dir
+    short    = 'W'
+    default  = "."
+    required = optional
+    help     = "Working directory for relative-path expressions."
+  }
+
+  /// path type   [feature: path type]
+  option config-file {
+    type     = path
+    short    = 'C'
+    required = optional
+    help     = "Optional TOML configuration file path."
+  }
+
+  /// bool type   [feature: bool type]
+  option no-prompt {
+    type     = bool
+    short    = '-'
+    default  = false
+    required = optional
+    help     = "Suppress the interactive prompt in REPL mode."
+  }
+
+  /// plain string (no length param)   [feature: string type]
+  option locale {
+    type     = string
+    short    = '-'
+    default  = "C"
+    required = optional
+    visible  = detail
+    help     = "Override LC_NUMERIC locale for decimal formatting."
+  }
+
+  /// sint8 in range + option-level ifdef qualifier
+  /// [feature: sint8, option-level ifdef qualifier]
+  option nice {
+    type     = sint8 in -20..19
+    short    = '-'
+    default  = 0
+    required = optional
+    visible  = detail
+    help     = "Unix nice(2) value for the evaluator process."
+    ifdef    LINUX_BUILD                     // [feature: option-level ifdef qualifier]
+  }
+
+  /// sint16 in range   [feature: sint16]
+  option rpc-port {
+    type     = sint16 in 1024..32767
+    short    = '-'
+    default  = 9000
+    required = optional
+    visible  = detail
+    help     = "TCP port for the JSON-RPC interface."
+  }
+
+  /// sint32   [feature: sint32]
+  option seed {
+    type     = sint32
+    short    = '-'
+    default  = -1
+    required = optional
+    help     = "PRNG seed. -1 = auto-seed from /dev/urandom."
+  }
+
+  /// sint64   [feature: sint64]
+  option byte-offset {
+    type     = sint64
+    short    = '-'
+    default  = 0
+    required = optional
+    visible  = never
+    help     = "Internal file byte offset (test hook)."
+  }
+
+  /// uint16 in range   [feature: uint16]
+  option max-vars {
+    type     = uint16 in 1..4096
+    short    = '-'
+    default  = 256
+    required = optional
+    help     = "Maximum number of user-defined variables."
+  }
+
+  /// uint32 with underscore literals   [feature: uint32, underscore numeric literals]
+  option max-steps {
+    type     = uint32 in 1..10_000_000
+    short    = '-'
+    default  = 1_000_000
+    required = optional
+    help     = "Maximum evaluation steps before soft timeout."
+  }
+
+  /// uint64 with hex default   [feature: uint64, hex literal]
+  option feature-flags {
+    type     = uint64
+    short    = '-'
+    default  = 0x0
+    required = optional
+    visible  = never
+    help     = "Internal feature-flags bitmask (reserved)."
+  }
+
+  /// float type   [feature: float type]
+  option progress-interval {
+    type     = float
+    short    = '-'
+    default  = 0.5
+    required = optional
+    visible  = detail
+    help     = "Progress-bar update interval in seconds."
+  }
+
+  /// double type + display-unit   [feature: double type, display-unit]
+  option epsilon {
+    type         = double
+    short        = '-'
+    default      = 1e-9
+    required     = optional
+    visible      = detail
+    display-unit = "(dimensionless)"         // [feature: display-unit on non-quantity]
+    help         = "Floating-point equality tolerance for == operator."
+  }
+
+  /// string(length=N) + sensitive   [feature: string(length=N), sensitive]
+  option api-token {
+    type      = string(length=128)
+    short     = '-'
+    sensitive = true
+    required  = optional
+    help      = "API token forwarded to plugins requiring authentication."
+    note      = "Replaced with *** in --dump output."                // [feature: note]
+    since     = "0.2.0"
+  }
+
+  /// depends-on   [feature: depends-on]
+  option api-url {
+    type       = string(length=256)
+    short      = '-'
+    default    = "https://api.example.com"
+    required   = optional
+    depends-on = api-token                   // [feature: depends-on]
+    help       = "Remote API endpoint used when --api-token is set."
+  }
+
+  /// deprecated option   [feature: deprecated]
+  option old-mode {
+    type       = string
+    short      = '-'
+    required   = optional
+    deprecated = "use --mode since 0.2.0"    // [feature: deprecated option]
+    help       = "(Deprecated) legacy mode string."
+  }
+}
+
+// ============================================================
+//  Section: Output   [feature: section-level ifdef qualifier]
+// ============================================================
+
+section "Output" {
+  ifdef LINUX_BUILD || POSIX_BUILD          // [feature: ifdef as section qualifier] 
+  description = "Output format and destination settings."
+
+  /// Named choice reference
+  option format {
+    type     = output-fmt
+    short    = 'F'
+    default  = text
+    required = optional
+    help     = "Result output format."
+  }
+
+  /// conflicts with list   [feature: conflicts with list]
+  option color {
+    type      = bool
+    short     = 'c'
+    default   = false
+    required  = optional
+    help      = "Force ANSI color even when stdout is not a TTY."
+    conflicts = [ format, json ]
+  }
+
+  /// flag type + conflicts single   [feature: flag type, conflicts single]
+  option json {
+    type      = flag
+    short     = 'j'
+    required  = optional
+    help      = "Shorthand for --format json."
+    conflicts = color
+  }
+
+  /// path type as outfile
+  option outfile {
+    type     = path
+    short    = 'o'
+    required = optional
+    help     = "Write results to this file instead of stdout."
+  }
+
+  /// allowed block with ifdef and default arms   [feature: allowed with ifdef arm]
+  option encoding {
+    type     = (utf8, latin1, ascii)
+    short    = '-'
+    default  = utf8
+    required = optional
+    help     = "Output character encoding."
+    allowed {
+      ifdef FULL_LOCALE_SUPPORT : (utf8, latin1, ascii)
+      default                   : (utf8, ascii)
+    }
+  }
+
+  /// option-level ifkey qualifier   [feature: ifkey as option qualifier]
+  option syslog-tag {
+    type     = string(length=32)
+    short    = '-'
+    default  = "calctool"
+    required = optional
+    help     = "Syslog identifier tag."
+    ifkey    dev_mode                        // [feature: option-level ifkey qualifier]
+  }
+}
+
+// ============================================================
+//  Section: Performance
+// ============================================================
+
+section "Performance" {
+  description = "Resource budgets for the evaluation engine."
+
+  /// duration in range + display-unit   [feature: duration, display-unit on quantity]
+  option deadline {
+    type         = duration in 1ms..10s
+    short        = '-'
+    default      = 250ms
+    display-unit = ms
+    required     = optional
+    help         = "Soft timeout per evaluation."
+    note         = "Has no effect when --mode=batch is active."
+    example      = "calctool --deadline 500ms eval '1/3'"
+  }
+
+  /// bytes in range   [feature: bytes in range]
+  option stack {
+    type     = bytes in 16KiB..16MiB
+    short    = '-'
+    default  = 1MiB
+    required = optional
+    help     = "Per-thread stack size for recursive evaluation."
+  }
+
+  /// bytes without range   [feature: bytes (plain)]
+  option memory-budget {
+    type     = bytes
+    short    = '-'
+    default  = 256MiB
+    required = optional
+    help     = "Working-set memory budget (advisory; plugins may consult this)."
+  }
+
+  /// frequency in range + display-unit + option-level ifkey qualifier
+  /// [feature: frequency, option-level ifkey qualifier]
+  option sample-rate {
+    type         = frequency in 1Hz..1GHz
+    short        = '-'
+    default      = 1kHz
+    display-unit = kHz
+    required     = optional
+    help         = "Sampling rate for the profiler integration."
+    ifkey        profiling                   // [feature: option-level ifkey qualifier]
+  }
+
+  /// ratio type   [feature: ratio]
+  option gc-threshold {
+    type     = ratio
+    short    = '-'
+    default  = 75%
+    required = optional
+    visible  = detail
+    help     = "Trigger GC when this fraction of the memory budget is used."
+  }
+}
+
+// ============================================================
+//  Section: Plugins
+// ============================================================
+
+section "Plugins" {
+  description = "\
+    Runtime plugin loading via dlopen. Plugins extend the operator \
+    set available to expressions. \
+  "
+
+  /// Named compound + multiple + unique
+  /// [feature: named compound reference, multiple = N, unique]
+  option plugin {
+    type     = plugin-spec
+    multiple = 16
+    unique   = true
+    required = optional
+    help     = "Plugin .so to load at startup. Repeat for each plugin."
+    details  = "\
+      path: path to the shared object. \
+      name: dispatch key in expressions (e.g. fin(x, y)). \
+      priority: lower numbers run first when plugins share an operator. \
+    "
+    example  = "--plugin path=./fin.so,name=fin,priority=10"
+    example  = "--plugin path=./num.so,name=num,priority=20"
+  }
+
+  /// Inline compound type   [feature: inline compound = { field: type }]
+  option loader {
+    type     = { sandbox: bool, timeout: uint32 }
+    short    = '-'
+    required = optional
+    help     = "Plugin loader settings: sandbox enable + load timeout (ms)."
+  }
+
+  /// alias + visible = detail   [feature: alias]
+  option plugin-path {
+    type     = string(length=1024)
+    short    = '-'
+    alias    = "pp"                          // [feature: alias]
+    default  = "./plugins"
+    visible  = detail
+    required = optional
+    help     = "Colon-separated dirs searched when plugin path has no slash."
+  }
+
+  /// bool with visible = never   [feature: visible = never]
+  option no-sandbox {
+    type     = bool
+    short    = '-'
+    default  = false
+    visible  = never
+    required = optional
+    help     = "Disable plugin sandboxing. CI and power users only."
+  }
+
+  /// allowed block: all three arm types   [feature: allowed with ifdef + ifkey + default]
+  option plugin-abi {
+    type     = (v1, v2, v3, auto)
+    short    = '-'
+    default  = auto
+    required = optional
+    help     = "Plugin ABI version to enforce."
+    allowed {
+      ifdef FULL_ABI_SUPPORT : (v1, v2, v3, auto)
+      ifkey board == rpi4    : (v1, v2, auto)
+      default                : (v1, auto)
+    }
+  }
+}
+
+// ============================================================
+//  Section: Threading   [feature: section-level ifkey qualifier]
+// ============================================================
+
+section "Threading" {
+  ifkey linux                               // [feature: ifkey as section qualifier]
+  description = "Worker thread pool configuration."
+
+  option workers {
+    type     = uint8 in 1..64
+    short    = 'w'
+    default  = 4
+    required = optional
+    help     = "Number of packet-processing worker threads."
+  }
+
+  /// Named choice reference
+  option thread-sched {
+    type     = sched-pol
+    short    = '-'
+    default  = SCHED_OTHER
+    required = optional
+    help     = "Scheduling policy for worker threads."
+  }
+
+  /// depends-on   [feature: depends-on]
+  option thread-prio {
+    type       = uint8 in 1..99
+    short      = '-'
+    default    = 50
+    required   = optional
+    depends-on = thread-sched
+    help       = "Thread priority (only meaningful for SCHED_RR and SCHED_FIFO)."
+    note       = "Has no effect when --thread-sched is SCHED_OTHER."
+  }
+
+  /// uint64 with hex default
+  option cpu-mask {
+    type     = uint64
+    short    = '-'
+    default  = 0xFFFF
+    required = optional
+    help     = "CPU affinity bitmask (hex). 0x0 = no pinning."
+  }
+}
+
+// ============================================================
+//  Groups
+//  [feature: group with mandatory]
+//  [feature: group advisory — no mandatory keyword]
+// ============================================================
+
+/// Mutually exclusive output format: exactly one of color/json
+group output-mode {
+  options   = [ color, json ]
+  mandatory                                 // [feature: group with mandatory]
+}
+
+/// Advisory group: related options, not mutually exclusive
+group precision-tuning {
+  options = [ precision, epsilon, seed ]
+}
+
+// ============================================================
+//  Subcommands
+// ============================================================
+
+subcommand eval {
+  brief       = "Evaluate one or more expressions"
+  description = "Parses and evaluates each expression in order."
+
+  option echo {
+    type     = bool
+    short    = 'e'
+    default  = false
+    required = optional
+    help     = "Echo each expression before printing its result."
+  }
+
+  option max-depth {
+    type     = uint16 in 1..4096
+    short    = '-'
+    default  = 256
+    required = optional
+    help     = "Maximum evaluator recursion depth."
+  }
+
+  ifkey profiling {
+    option profile-out {
+      type     = file
+      short    = '-'
+      required = optional
+      help     = "Write profiling data to this file."
+    }
+  }
+
+  positional expressions {
+    type     = string(length=1024)
+    multiple = 1..32
+    help     = "Expressions to evaluate."
+  }
+}
+
+subcommand bench {
+  brief       = "Benchmark a plugin under load"
+  description = "Runs a plugin's primary operator N times."
+
+  option iterations {
+    type     = uint32 in 1..10_000_000
+    short    = 'n'
+    default  = 100_000
+    required = optional
+    help     = "Number of iterations to run."
+  }
+
+  option warmup {
+    type     = uint32
+    short    = '-'
+    default  = 1_000
+    required = optional
+    help     = "Warmup iterations before timing starts."
+  }
+
+  option report-interval {
+    type         = duration in 100ms..60s
+    short        = '-'
+    default      = 1s
+    display-unit = ms
+    required     = optional
+    help         = "How often to print intermediate throughput results."
+  }
+
+  positional plugin-name {
+    type     = string(length=32)
+    required = mandatory
+    help     = "Plugin name to benchmark."
+  }
+}
+
+subcommand evaluate {
+  brief      = "(Deprecated) alias for eval"
+  deprecated = "use 'eval' since 0.1.0"
+
+  positional expressions {
+    type     = string(length=1024)
+    multiple = 1..32
+    help     = "Expressions to evaluate (deprecated, use eval)."
+  }
+}

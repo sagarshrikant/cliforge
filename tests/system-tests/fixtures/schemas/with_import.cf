@@ -1,0 +1,15 @@
+@schema 1
+
+@import "lib_for_import.cf" as lib
+
+meta {
+  prefix = "wi"
+  output = "cmdline_wi"
+  brief  = "Schema with @import for testing."
+}
+
+option mode {
+  type    = enum { fast, accurate }
+  default = fast
+  help    = "Processing mode."
+}

@@ -1,0 +1,330 @@
+{
+  "Schema header": {
+    "prefix": "schema",
+    "body": [
+      "@schema cliforge v1",
+      "",
+      "meta {",
+      "  app       = \"${1:my-app}\"",
+      "  brief     = \"${2:short description}\"",
+      "  version   = \"${3:0.1.0}\"",
+      "  author    = \"${4:$TM_FULLNAME}\"",
+      "  prefix    = \"${5:${1/[^A-Za-z0-9]+/_/g}}\"",
+      "  output    = \"cmdline\"",
+      "  doc-title = \"${1:my-app} Command-line Reference\"",
+      "}",
+      "$0"
+    ],
+    "description": "Top-of-file schema directive + meta block"
+  },
+
+  "@import": {
+    "prefix": "import",
+    "body": [
+      "@import \"${1:path/to/lib.cf}\" as ${2:alias}$0"
+    ],
+    "description": "Import another schema with a mandatory alias"
+  },
+
+  "@import (ifkey guarded)": {
+    "prefix": "import-ifkey",
+    "body": [
+      "@import \"${1:path/to/lib.cf}\" as ${2:alias}   ifkey ${3:have-lib}$0"
+    ],
+    "description": "Conditional import gated on a --key-words key"
+  },
+
+  "section": {
+    "prefix": "section",
+    "body": [
+      "section \"${1:Section Title}\" {",
+      "  description = \"${2:Section description.}\"",
+      "",
+      "  $0",
+      "}"
+    ],
+    "description": "Visual --help section with description"
+  },
+
+  "ifdef block": {
+    "prefix": "ifdef",
+    "body": [
+      "ifdef ${1:SYMBOL} {",
+      "  $0",
+      "}"
+    ],
+    "description": "Build-time conditional block (CFLAGS / CPPFLAGS -DSYMBOL)"
+  },
+
+  "ifdef || block": {
+    "prefix": "ifdef-or",
+    "body": [
+      "ifdef ${1:SYMBOL_A} || ${2:SYMBOL_B} {",
+      "  $0",
+      "}"
+    ],
+    "description": "Build-time conditional: either symbol defined"
+  },
+
+  "ifkey block": {
+    "prefix": "ifkey",
+    "body": [
+      "ifkey ${1:key-name} {",
+      "  $0",
+      "}"
+    ],
+    "description": "Key-words conditional block (--key-words=key-name)"
+  },
+
+  "ifkey == block": {
+    "prefix": "ifkey-eq",
+    "body": [
+      "ifkey ${1:key} == ${2:value} {",
+      "  $0",
+      "}"
+    ],
+    "description": "Key-words conditional with value check (--key-words=key=value)"
+  },
+
+  "named choice type": {
+    "prefix": "choice",
+    "body": [
+      "${1:type-name} = (${2:value1}, ${3:value2}, ${4:value3})$0"
+    ],
+    "description": "Named reusable choice type (language-neutral, replaces enum keyword)"
+  },
+
+  "named compound type": {
+    "prefix": "compound",
+    "body": [
+      "${1:type-name} = {",
+      "  ${2:field1} : ${3:string},",
+      "  ${4:field2} : ${5:uint16}",
+      "}$0"
+    ],
+    "description": "Named reusable compound type (language-neutral, replaces struct keyword)"
+  },
+
+  "option (simple)": {
+    "prefix": "option",
+    "body": [
+      "option ${1:name} {",
+      "  type    = ${2|string,path,file,dir,bool,flag,uint8,uint16,uint32,uint64,sint8,sint16,sint32,sint64,float,double|}",
+      "  short   = '${3:n}'",
+      "  default = \"${4:value}\"",
+      "  help    = \"${5:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Plain option declaration"
+  },
+
+  "option (mandatory)": {
+    "prefix": "option-req",
+    "body": [
+      "option ${1:name} {",
+      "  type     = ${2:string}",
+      "  required = mandatory",
+      "  help     = \"${3:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Mandatory option (parser errors out if missing)"
+  },
+
+  "option (with details)": {
+    "prefix": "option-doc",
+    "body": [
+      "option ${1:name} {",
+      "  type    = ${2:string}",
+      "  default = \"${3:value}\"",
+      "  help    = \"${4:Brief description shown in --help.}\"",
+      "  details = \"${5:Longer explanation shown in --help-detail and cmdline.md.}\"",
+      "  example = \"--${1} ${6:example-value}\"",
+      "  since   = \"${7:1.0}\"",
+      "}$0"
+    ],
+    "description": "Option with full documentation fields"
+  },
+
+  "option (quantity)": {
+    "prefix": "option-qty",
+    "body": [
+      "option ${1:name} {",
+      "  type         = ${2|duration,bytes,frequency,ratio|}",
+      "  default      = \"${3:10 ms}\"",
+      "  display-unit = \"${4:ms}\"",
+      "  help         = \"${5:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Unit-aware option (duration / bytes / frequency / ratio)"
+  },
+
+  "option (repeatable)": {
+    "prefix": "option-multi",
+    "body": [
+      "option ${1:name} {",
+      "  type     = ${2:string}",
+      "  multiple = ${3:8}",
+      "  required = optional",
+      "  help     = \"${4:Brief description. Repeatable up to ${3} times.}\"",
+      "}$0"
+    ],
+    "description": "Repeatable option stored in a static array"
+  },
+
+  "option (repeatable range)": {
+    "prefix": "option-multi-range",
+    "body": [
+      "option ${1:name} {",
+      "  type     = ${2:string}",
+      "  multiple = ${3:1}..${4:32}",
+      "  required = optional",
+      "  help     = \"${5:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Repeatable option with min..max occurrence range"
+  },
+
+  "option (inline choice)": {
+    "prefix": "option-choice",
+    "body": [
+      "option ${1:name} {",
+      "  type    = (${2:low}, ${3:balanced}, ${4:high})",
+      "  default = \"${2:low}\"",
+      "  help    = \"${5:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Option with an inline anonymous choice type"
+  },
+
+  "option (inline compound)": {
+    "prefix": "option-compound",
+    "body": [
+      "option ${1:name} {",
+      "  type = {",
+      "    ${2:host}  : string,",
+      "    ${3:port}  : uint16",
+      "  }",
+      "  multiple = ${4:4}",
+      "  help     = \"${5:Brief description.}\"",
+      "  example  = \"--${1} ${2}=${6:example.com},${3}=${7:8080}\"",
+      "}$0"
+    ],
+    "description": "Option with an inline compound type and repetition"
+  },
+
+  "option (deprecated)": {
+    "prefix": "option-deprecated",
+    "body": [
+      "option ${1:old-name} {",
+      "  type       = ${2:string}",
+      "  deprecated = \"Use --${3:new-name} instead (deprecated since ${4:1.4.0}).\"",
+      "}$0"
+    ],
+    "description": "Deprecated option that prints a warning when used"
+  },
+
+  "option (sensitive)": {
+    "prefix": "option-secret",
+    "body": [
+      "option ${1:api-token} {",
+      "  type      = string",
+      "  required  = optional",
+      "  sensitive = true",
+      "  help      = \"${2:Authentication token (masked in logs and dumps).}\"",
+      "}$0"
+    ],
+    "description": "Sensitive option masked in cmdline_dump() and log callbacks"
+  },
+
+  "option (detail/hidden)": {
+    "prefix": "option-detail",
+    "body": [
+      "option ${1:name} {",
+      "  type    = ${2:uint32}",
+      "  default = ${3:0}",
+      "  visible = detail",
+      "  help    = \"${4:Advanced tuning knob (--help-detail only).}\"",
+      "}$0"
+    ],
+    "description": "Option shown only in --help-detail (tuning knob)"
+  },
+
+  "option (variant-keyed default)": {
+    "prefix": "option-variant",
+    "body": [
+      "option ${1:logfile} {",
+      "  type    = path",
+      "  default = {",
+      "    ifdef ${2:LINUX_BUILD}   : \"${3:/var/log/app.log}\"",
+      "    ifdef ${4:QNX_BUILD}     : \"${5:/fs/log/app.log}\"",
+      "    default                  : \"${6:./app.log}\"",
+      "  }",
+      "  help = \"${7:Log output file path.}\"",
+      "}$0"
+    ],
+    "description": "Variant-keyed default with mandatory fallback arm"
+  },
+
+  "option (allowed block)": {
+    "prefix": "option-allowed",
+    "body": [
+      "option ${1:name} {",
+      "  type    = ${2:my-choice-type}",
+      "  default = \"${3:value-a}\"",
+      "  allowed {",
+      "    ifdef ${4:FULL_SUPPORT} : (${5:value-a, value-b, value-c, value-d})",
+      "    default                 : (${6:value-a, value-b})",
+      "  }",
+      "  help = \"${7:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Option with conditional allowed-value set"
+  },
+
+  "option (depends-on)": {
+    "prefix": "option-depends",
+    "body": [
+      "option ${1:name} {",
+      "  type       = ${2:string}",
+      "  required   = optional",
+      "  depends-on = ${3:other-option}",
+      "  note       = \"Only meaningful when --${3} is set.\"",
+      "  help       = \"${4:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Option that requires another option to also be set"
+  },
+
+  "option (conflicts)": {
+    "prefix": "option-conflicts",
+    "body": [
+      "option ${1:name} {",
+      "  type      = ${2:string}",
+      "  conflicts = ${3:other-option}",
+      "  help      = \"${4:Brief description.}\"",
+      "}$0"
+    ],
+    "description": "Option that conflicts with another (mutually exclusive)"
+  },
+
+  "group (mandatory — exactly one)": {
+    "prefix": "group-mandatory",
+    "body": [
+      "group ${1:output-format} {",
+      "  options   = [ ${2:opt-a}, ${3:opt-b} ]",
+      "  mandatory",
+      "}$0"
+    ],
+    "description": "Exactly-one group: the user must supply exactly one of the listed options"
+  },
+
+  "group (advisory)": {
+    "prefix": "group",
+    "body": [
+      "group ${1:group-name} {",
+      "  options = [ ${2:opt-a}, ${3:opt-b} ]",
+      "}$0"
+    ],
+    "description": "Advisory group: documents related mutually-exclusive options; no enforcement"
+  }
+}

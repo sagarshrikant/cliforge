@@ -1,0 +1,942 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "cliforge",
+  "scopeName": "source.cliforge",
+  "fileTypes": [
+    "cf"
+  ],
+  "patterns": [
+    {
+      "include": "#doc-comments"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#schema-directive"
+    },
+    {
+      "include": "#import-directive"
+    },
+    {
+      "include": "#conditional-block"
+    },
+    {
+      "include": "#named-type-decl"
+    },
+    {
+      "include": "#meta-block"
+    },
+    {
+      "include": "#section-block"
+    },
+    {
+      "include": "#group-block"
+    },
+    {
+      "include": "#option-block"
+    },
+    {
+      "include": "#subcommand-block"
+    },
+    {
+      "include": "#positional-block"
+    },
+    {
+      "include": "#literals"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cliforge",
+          "begin": "//(?!/)",
+          "end": "$",
+          "patterns": [
+            {
+              "include": "#todo"
+            }
+          ]
+        },
+        {
+          "name": "comment.block.cliforge",
+          "begin": "/\\*(?![*!])",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#todo"
+            }
+          ]
+        }
+      ]
+    },
+    "doc-comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.cliforge",
+          "begin": "///",
+          "end": "$",
+          "patterns": [
+            {
+              "include": "#doxygen-tags"
+            },
+            {
+              "include": "#todo"
+            }
+          ]
+        },
+        {
+          "name": "comment.block.documentation.cliforge",
+          "begin": "/\\*[*!]",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "include": "#doxygen-tags"
+            },
+            {
+              "include": "#todo"
+            }
+          ]
+        }
+      ]
+    },
+    "doxygen-tags": {
+      "patterns": [
+        {
+          "name": "storage.type.class.doxygen.cliforge",
+          "match": "@(brief|details|example|see|since|deprecated|unit|warning|note|param|return|returns|throws)\\b"
+        }
+      ]
+    },
+    "todo": {
+      "match": "\\b(TODO|FIXME|XXX|NOTE|HACK)\\b",
+      "name": "keyword.other.todo.cliforge"
+    },
+    "schema-directive": {
+      "match": "^\\s*(@schema)\\s+(cliforge)\\s+(v\\d+)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.schema.cliforge"
+        },
+        "2": {
+          "name": "support.constant.cliforge"
+        },
+        "3": {
+          "name": "constant.numeric.version.cliforge"
+        }
+      }
+    },
+    "import-directive": {
+      "begin": "(@import)\\s+(\"[^\"]*\")",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.import.cliforge"
+        },
+        "2": {
+          "name": "string.quoted.double.cliforge"
+        }
+      },
+      "end": "(?=$|//|/\\*)",
+      "patterns": [
+        {
+          "match": "\\b(as)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.cliforge"
+            },
+            "2": {
+              "name": "entity.name.namespace.alias.cliforge"
+            }
+          }
+        },
+        {
+          "match": "\\b(ifkey|ifnkey)\\b",
+          "name": "keyword.control.conditional.cliforge"
+        },
+        {
+          "include": "#literals"
+        }
+      ]
+    },
+    "conditional-block": {
+      "patterns": [
+        {
+          "comment": "ifdef / ifndef SYMBOL [|| SYMBOL ...] { ... }",
+          "begin": "\\b(ifdef|ifndef)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.conditional.cliforge"
+            }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\b",
+              "name": "constant.other.define.cliforge"
+            },
+            {
+              "match": "&&|\\|\\|",
+              "name": "keyword.operator.logical.cliforge"
+            },
+            {
+              "include": "#meta-block"
+            },
+            {
+              "include": "#section-block"
+            },
+            {
+              "include": "#option-block"
+            },
+            {
+              "include": "#named-type-decl"
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#doc-comments"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        {
+          "comment": "ifkey / ifnkey KEY [== VALUE] { ... }",
+          "begin": "\\b(ifkey|ifnkey)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.conditional.cliforge"
+            }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "match": "==|!=",
+              "name": "keyword.operator.comparison.cliforge"
+            },
+            {
+              "match": "\\b([A-Za-z_][A-Za-z0-9_\\-]*)\\b",
+              "name": "constant.other.key.cliforge"
+            },
+            {
+              "include": "#meta-block"
+            },
+            {
+              "include": "#section-block"
+            },
+            {
+              "include": "#option-block"
+            },
+            {
+              "include": "#named-type-decl"
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#doc-comments"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        }
+      ]
+    },
+    "named-type-decl": {
+      "comment": "name = (A, B, C)   or   name = { field: type, ... }  \u2014 named type alias at top-level or inside a section",
+      "patterns": [
+        {
+          "comment": "Named choice type:  name = ( ... )",
+          "begin": "([A-Za-z_][A-Za-z0-9_\\-]*)\\s*(=)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.type.cliforge"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.cliforge"
+            },
+            "3": {
+              "name": "punctuation.section.parens.begin.cliforge"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.parens.end.cliforge"
+            }
+          },
+          "patterns": [
+            {
+              "match": "[A-Za-z_][A-Za-z0-9_\\-]*",
+              "name": "variable.other.enummember.cliforge"
+            },
+            {
+              "include": "#punctuation"
+            }
+          ]
+        },
+        {
+          "comment": "Named compound type:  name = { field: type, ... }",
+          "begin": "([A-Za-z_][A-Za-z0-9_\\-]*)\\s*(=)\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.type.cliforge"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.cliforge"
+            },
+            "3": {
+              "name": "punctuation.section.braces.begin.cliforge"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.braces.end.cliforge"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#compound-fields"
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#doc-comments"
+            }
+          ]
+        }
+      ]
+    },
+    "meta-block": {
+      "begin": "\\b(meta)\\b\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.meta.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "match": "\\b(app|brief|version|author|prefix|output|doc-title|description|i18n)\\b",
+          "name": "support.type.property-name.cliforge"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "section-block": {
+      "begin": "\\b(section)\\b\\s*(\"[^\"]*\")?\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.section.cliforge"
+        },
+        "2": {
+          "name": "string.quoted.double.section-name.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#named-type-decl"
+        },
+        {
+          "include": "#subcommand-block"
+        },
+        {
+          "include": "#positional-block"
+        },
+        {
+          "include": "#option-block"
+        },
+        {
+          "include": "#qualifier-conditional"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "group-block": {
+      "begin": "\\b(group)\\b\\s+([A-Za-z_][A-Za-z0-9_\\-]*)\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.group.cliforge"
+        },
+        "2": {
+          "name": "entity.name.tag.group.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "match": "\\b(options)\\b",
+          "name": "support.type.property-name.cliforge"
+        },
+        {
+          "match": "\\b(mandatory)\\b",
+          "name": "keyword.other.mandatory.cliforge"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "option-block": {
+      "begin": "\\b(option)\\b\\s+([A-Za-z_][A-Za-z0-9_\\-]*)\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.option.cliforge"
+        },
+        "2": {
+          "name": "entity.name.variable.option.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#qualifier-keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#inline-compound-body"
+        },
+        {
+          "include": "#allowed-block"
+        },
+        {
+          "include": "#variant-default-block"
+        },
+        {
+          "include": "#qualifier-conditional"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "inline-compound-body": {
+      "comment": "Inline compound type body:  type = { field: type, ... }",
+      "begin": "(?<=type\\s*=\\s*)\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.begin.cliforge"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.cliforge"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#compound-fields"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        }
+      ]
+    },
+    "compound-fields": {
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_][A-Za-z0-9_\\-]*)\\b\\s*(:)",
+          "captures": {
+            "1": {
+              "name": "variable.other.member.cliforge"
+            },
+            "2": {
+              "name": "punctuation.separator.cliforge"
+            }
+          }
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "allowed-block": {
+      "comment": "allowed { ifdef ... : (...), ifkey ... : (...), default : (...) }",
+      "begin": "\\b(allowed)\\b\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.allowed.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "match": "\\b(ifdef|ifndef|ifkey|ifnkey|default)\\b",
+          "name": "keyword.control.conditional.cliforge"
+        },
+        {
+          "match": "==|!=",
+          "name": "keyword.operator.comparison.cliforge"
+        },
+        {
+          "match": "\\b([A-Za-z_][A-Za-z0-9_\\-]*)\\b",
+          "name": "constant.other.define.cliforge"
+        },
+        {
+          "include": "#inline-choice"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "inline-choice": {
+      "comment": "Parenthesised list of choice members: (a, b, c)",
+      "begin": "\\(",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.parens.begin.cliforge"
+        }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.parens.end.cliforge"
+        }
+      },
+      "patterns": [
+        {
+          "match": "[A-Za-z_][A-Za-z0-9_\\-]*",
+          "name": "variable.other.enummember.cliforge"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "variant-default-block": {
+      "comment": "default = { ifdef SYMBOL : \"...\", ifkey KEY : \"...\", default : \"...\" }",
+      "begin": "(default)\\s*(=)\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.cliforge"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.cliforge"
+        }
+      },
+      "end": "\\}",
+      "patterns": [
+        {
+          "match": "\\b(ifdef|ifndef|ifkey|ifnkey)\\b",
+          "name": "keyword.control.conditional.cliforge"
+        },
+        {
+          "match": "\\b(default)\\b\\s*(:)",
+          "captures": {
+            "1": {
+              "name": "support.constant.default-arm.cliforge"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.cliforge"
+            }
+          }
+        },
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_\\-]*)\\s*(:)",
+          "captures": {
+            "1": {
+              "name": "variable.parameter.variant.cliforge"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.cliforge"
+            }
+          }
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "qualifier-keywords": {
+      "patterns": [
+        {
+          "match": "\\b(type|short|default|required|visible|multiple|alias|depends-on|conflicts|allowed|sensitive|deprecated|display-unit|unique|help|details|note|example|since)\\b",
+          "name": "support.type.property-name.cliforge"
+        },
+        {
+          "match": "\\b(optional|mandatory)\\b",
+          "name": "support.constant.required-value.cliforge"
+        },
+        {
+          "match": "\\b(all|detail|never)\\b",
+          "name": "support.constant.visible-value.cliforge"
+        },
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.cliforge"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(sint8|sint16|sint32|sint64|uint8|uint16|uint32|uint64|float|double|bool|flag|string|path|file|dir)\\b(?!\\s*[:=])",
+          "name": "storage.type.primitive.cliforge"
+        },
+        {
+          "match": "\\b(duration|bytes|frequency|ratio)\\b",
+          "name": "storage.type.quantity.cliforge"
+        },
+        {
+          "comment": "string/path with length param: string(length=N)",
+          "match": "\\b(string|path|file|dir)\\b\\s*(\\()\\s*(length)\\s*(=)\\s*([A-Za-z0-9_]+)\\s*(\\))",
+          "captures": {
+            "1": {
+              "name": "storage.type.primitive.cliforge"
+            },
+            "2": {
+              "name": "punctuation.section.parens.begin.cliforge"
+            },
+            "3": {
+              "name": "support.type.property-name.cliforge"
+            },
+            "4": {
+              "name": "keyword.operator.assignment.cliforge"
+            },
+            "5": {
+              "name": "constant.numeric.cliforge"
+            },
+            "6": {
+              "name": "punctuation.section.parens.end.cliforge"
+            }
+          }
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#quantities"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#character-literal"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.cliforge",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.cliforge",
+          "match": "\\\\([ntrv0\\\\\"']|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4})"
+        }
+      ]
+    },
+    "character-literal": {
+      "name": "string.quoted.single.cliforge",
+      "match": "'(?:[^'\\\\]|\\\\.)*'"
+    },
+    "quantities": {
+      "match": "(?<![A-Za-z0-9_])([-+]?(?:0x[0-9A-Fa-f_]+|0b[01_]+|0o[0-7_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][-+]?\\d+)?))(ns|us|\u00b5s|ms|s|m|h|d|B|KB|KiB|MB|MiB|GB|GiB|TB|TiB|Hz|kHz|MHz|GHz|%)\\b",
+      "captures": {
+        "1": {
+          "name": "constant.numeric.cliforge"
+        },
+        "2": {
+          "name": "keyword.other.unit.cliforge"
+        }
+      }
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.cliforge",
+          "match": "(?<![A-Za-z0-9_])[-+]?0x[0-9A-Fa-f][0-9A-Fa-f_]*"
+        },
+        {
+          "name": "constant.numeric.binary.cliforge",
+          "match": "(?<![A-Za-z0-9_])[-+]?0b[01][01_]*"
+        },
+        {
+          "name": "constant.numeric.octal.cliforge",
+          "match": "(?<![A-Za-z0-9_])[-+]?0o[0-7][0-7_]*"
+        },
+        {
+          "name": "constant.numeric.float.cliforge",
+          "match": "(?<![A-Za-z0-9_])[-+]?\\d[\\d_]*\\.\\d[\\d_]*(?:[eE][-+]?\\d+)?"
+        },
+        {
+          "name": "constant.numeric.decimal.cliforge",
+          "match": "(?<![A-Za-z0-9_])[-+]?\\d[\\d_]*"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.range.cliforge",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.logical.cliforge",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.comparison.cliforge",
+          "match": "==|!="
+        },
+        {
+          "name": "keyword.operator.assignment.cliforge",
+          "match": "="
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.section.braces.begin.cliforge",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.braces.end.cliforge",
+          "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.brackets.begin.cliforge",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.brackets.end.cliforge",
+          "match": "\\]"
+        },
+        {
+          "name": "punctuation.section.parens.begin.cliforge",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.parens.end.cliforge",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.separator.comma.cliforge",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.colon.cliforge",
+          "match": ":"
+        },
+        {
+          "name": "punctuation.terminator.statement.cliforge",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.accessor.dot.cliforge",
+          "match": "\\."
+        }
+      ]
+    },
+    "qualifier-conditional": {
+      "comment": "Single-line conditional qualifier used directly inside section/option bodies — no block body follows. Contrast with conditional-block which opens a { } scope.",
+      "patterns": [
+        {
+          "comment": "ifdef / ifndef SYMBOL [&& SYMBOL || SYMBOL ...]",
+          "match": "\\b(ifdef|ifndef)\\b((?:\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s*(?:&&|\\|\\|)\\s*[A-Za-z_][A-Za-z0-9_]*)*)?)",
+          "captures": {
+            "1": { "name": "keyword.control.conditional.cliforge" },
+            "2": { "name": "constant.other.define.cliforge" }
+          }
+        },
+        {
+          "comment": "ifkey / ifnkey KEY [== VALUE | != VALUE]",
+          "match": "\\b(ifkey|ifnkey)\\b(?:\\s+([A-Za-z_][A-Za-z0-9_\\-]*)(?:\\s*(==|!=)\\s*([A-Za-z_][A-Za-z0-9_\\-]*))?)?",
+          "captures": {
+            "1": { "name": "keyword.control.conditional.cliforge" },
+            "2": { "name": "constant.other.key.cliforge" },
+            "3": { "name": "keyword.operator.comparison.cliforge" },
+            "4": { "name": "constant.other.key.cliforge" }
+          }
+        }
+      ]
+    },
+    "subcommand-block": {
+      "begin": "\\b(subcommand)\\b\\s+([A-Za-z_][A-Za-z0-9_\\-]*)\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.subcommand.cliforge"
+        },
+        "2": {
+          "name": "entity.name.function.subcommand.cliforge"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.cliforge"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#subcommand-header-keys"
+        },
+        {
+          "include": "#named-type-decl"
+        },
+        {
+          "include": "#option-block"
+        },
+        {
+          "include": "#positional-block"
+        },
+        {
+          "include": "#group-block"
+        },
+        {
+          "include": "#section-block"
+        },
+        {
+          "include": "#conditional-block"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "subcommand-header-keys": {
+      "match": "\\b(brief|description|deprecated)\\b",
+      "name": "support.type.property-name.subcommand.cliforge"
+    },
+    "positional-block": {
+      "begin": "\\b(positional)\\b\\s+([A-Za-z_][A-Za-z0-9_\\-]*)\\s*\\{",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.positional.cliforge"
+        },
+        "2": {
+          "name": "entity.name.variable.positional.cliforge"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.cliforge"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#qualifier-keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#inline-compound-body"
+        },
+        {
+          "include": "#qualifier-conditional"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#doc-comments"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    }
+  }
+}

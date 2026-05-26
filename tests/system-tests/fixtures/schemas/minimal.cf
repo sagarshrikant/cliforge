@@ -1,0 +1,14 @@
+@schema 1
+
+meta {
+  prefix  = "min"
+  output  = "cmdline_min"
+  version = "0.1.0"
+  brief   = "Minimal schema for testing."
+}
+
+option verbose {
+  type    = flag
+  short   = 'v'
+  help    = "Enable verbose output."
+}

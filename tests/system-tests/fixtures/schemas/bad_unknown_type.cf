@@ -1,0 +1,13 @@
+@schema 1
+
+meta {
+  prefix = "bad"
+  output = "cmdline_bad"
+}
+
+# ERROR: option block is never closed (missing '}').
+# TODO: once the parser validates type names, use type = garbagetype and
+#       the parser should reject it without needing a structural error.
+option broken {
+  type = flag
+  help = "Unclosed option block."

@@ -1,0 +1,28 @@
+# release-args.cfargs — example response file for calctool.
+#
+# Invoke as:
+#     calctool @release-args.cfargs eval "2 + 2"
+#  or calctool -C release-args.cfargs eval "2 + 2"
+#
+# Lines starting with # are comments. Blank lines are ignored.
+# One argv token per line; shell-style quoting honoured.
+
+--precision 20
+--mode      real
+--verbose   verbose
+--logfile   ./calctool-release.log
+
+# Load two plugins at startup
+--plugin path=./fin.so,name=fin,priority=10
+--plugin path=./num.so,name=num,priority=20
+
+# Performance budgets
+--deadline       500ms
+--stack          2MiB
+--memory-budget  512MiB
+
+# Library-namespaced options
+--arith.div-zero error
+--arith.epsilon  1e-12
+--cmp.epsilon    1e-12
+--trig.units     radians

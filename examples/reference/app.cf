@@ -1,0 +1,406 @@
+@schema cliforge v1
+
+/*!
+ *  netmon — network packet monitor daemon
+ *
+ *  Secondary reference example for cliforge v1. This schema illustrates
+ *  features not prominently shown in calctool:
+ *    - depends-on, conflicts between options
+ *    - allowed { } blocks with both ifdef and if conditions
+ *    - deprecated options
+ *    - board-specific conditional sections (generic hardware)
+ *    - two statically-linked libs via @import
+ *    - one runtime-loaded (dlopen) decoder lib
+ *    - variant-keyed defaults across three platforms
+ *    - group with mandatory, group without
+ */
+
+meta {
+  app         = "netmon"
+  brief       = "Network packet monitor daemon"
+  version     = "1.0.0"
+  author      = "Your Name"
+  prefix      = "nm"
+  output      = "cmdline"
+  doc-title   = "netmon Command-line Reference"
+  description = "\
+    netmon captures network packets from one or more interfaces, \
+    optionally decodes protocol layers, and writes results to a \
+    configurable output sink. \
+    \
+    It statically links libnet (HTTP control plane) and libfilter \
+    (BPF filter compilation). Protocol decoders are loaded at runtime \
+    via dlopen. \
+  "
+}
+
+// ---------------------------------------------------------------------------
+//  Imports
+// ---------------------------------------------------------------------------
+
+@import "libnet.cf"    as net
+@import "libfilter.cf" as flt
+
+// Decoder lib: runtime-discovered via --decoder option, NOT @imported.
+// Each decoder author writes their own .cf and ships their own parser.
+
+// ---------------------------------------------------------------------------
+//  Named choice types
+// ---------------------------------------------------------------------------
+
+transport-proto = (ethernet, ipv4, ipv6, tcp, udp, icmp, arp)
+output-format   = (pcap, json, text, syslog)
+log-level       = (error, warn, info, debug, trace)
+
+// ---------------------------------------------------------------------------
+//  Named compound type for decoder plugins
+// ---------------------------------------------------------------------------
+
+decoder-spec = {
+  path     : file(length=256)
+  proto    : string(length=32)  = "unknown"
+  priority : uint8              = 100
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Capture
+// ---------------------------------------------------------------------------
+
+section "Capture" {
+  description = "Network interface and packet capture settings."
+
+  option interface {
+    type     = string(length=64)
+    short    = 'i'
+    required = mandatory
+    help     = "Network interface to capture from (e.g. eth0, en0)."
+    example  = "netmon --interface eth0"
+    example  = "netmon -i en0 --interface lo"
+  }
+
+  option snaplen {
+    type     = uint32 in 64..65535
+    short    = 's'
+    default  = 65535
+    required = optional
+    help     = "Maximum bytes to capture per packet."
+  }
+
+  option promiscuous {
+    type     = bool
+    short    = 'P'
+    default  = false
+    required = optional
+    help     = "Put interface in promiscuous mode."
+    note     = "Requires elevated privileges on most platforms."
+  }
+
+  option ring-buffer {
+    type         = bytes in 1MiB..1GiB
+    short        = '-'
+    default      = 64MiB
+    required     = optional
+    display-unit = MiB
+    help         = "Kernel ring-buffer size for packet capture."
+    ifdef        LINUX_BUILD
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Filter
+// ---------------------------------------------------------------------------
+
+section "Filter" {
+  description = "Packet filtering rules. Without a filter, all packets are captured."
+
+  option proto {
+    type    = transport-proto
+    short   = '-'
+    alias   = "p"
+    default = ipv4
+    required = optional
+    help    = "Transport protocol filter."
+    allowed {
+      ifdef FULL_PROTO_SUPPORT   : (ethernet, ipv4, ipv6, tcp, udp, icmp, arp)
+      default                    : (ipv4, ipv6, tcp, udp)
+    }
+  }
+
+  option port {
+    type       = uint16 in 1..65535
+    short      = '-'
+    required   = optional
+    help       = "Capture only packets matching this port number."
+    depends-on = proto
+    note       = "Only meaningful when --proto is tcp or udp."
+  }
+
+  option host {
+    type     = string(length=64)
+    short    = '-'
+    required = optional
+    matches  = "*.*"
+    help     = "Capture only packets involving this host (IP or hostname)."
+  }
+
+  option bpf {
+    type      = string(length=1024)
+    short     = 'f'
+    required  = optional
+    help      = "Raw BPF filter expression (overrides --proto / --port / --host)."
+    conflicts = [ proto, port, host ]
+    example   = "netmon -f 'tcp port 443 and host 10.0.0.1'"
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Output
+// ---------------------------------------------------------------------------
+
+section "Output" {
+  description = "Where and how captured packets are written."
+
+  option format {
+    type     = output-format
+    short    = 'F'
+    default  = pcap
+    required = optional
+    help     = "Output format."
+  }
+
+  option outfile {
+    type     = file
+    short    = 'o'
+    default  = {
+      ifdef  LINUX_BUILD : "/var/log/netmon.pcap"
+      ifdef  QNX_BUILD   : "/fs/log/netmon.pcap"
+      default            : "./netmon.pcap"
+    }
+    required = optional
+    help     = "Output file path."
+    note     = "When --format=syslog, this field is ignored."
+  }
+
+  option rotate-size {
+    type       = bytes in 1MiB..10GiB
+    short      = '-'
+    required   = optional
+    depends-on = outfile
+    help       = "Rotate output file when it reaches this size."
+    example    = "netmon --rotate-size 100MiB -o capture.pcap"
+  }
+
+  option compress {
+    type       = bool
+    short      = 'z'
+    default    = false
+    required   = optional
+    depends-on = outfile
+    help       = "Compress output file with gzip."
+    conflicts  = json
+  }
+}
+
+// Exactly one output format is allowed
+group output-sink {
+  options = [ outfile, format ]
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Decoders
+// ---------------------------------------------------------------------------
+
+section "Decoders" {
+  description = "\
+    Runtime protocol decoder loading. Decoders are shared objects loaded \
+    via dlopen. Each decoder handles one protocol layer and passes control \
+    to the next. \
+  "
+
+  option decoder {
+    type     = decoder-spec
+    multiple = 8
+    unique   = true
+    required = optional
+    help     = "Protocol decoder .so to load. Repeat for each decoder."
+    details  = "\
+      path: path to the shared object. \
+      proto: protocol name this decoder handles (used for dispatch). \
+      priority: lower numbers run first when multiple decoders handle the same proto. \
+    "
+    example  = "--decoder path=./http.so,proto=http"
+    example  = "--decoder path=./tls.so,proto=tls,priority=10"
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Logging
+// ---------------------------------------------------------------------------
+
+section "Logging" {
+  description = "Diagnostic logging configuration."
+
+  option log-level {
+    type     = log-level
+    short    = 'l'
+    default  = warn
+    required = optional
+    help     = "Diagnostic log level."
+  }
+
+  option logfile {
+    type     = file
+    short    = 'L'
+    required = optional
+    help     = "Log file path. Defaults to stderr when not set."
+  }
+
+  option syslog-tag {
+    type     = string(length=32)
+    short    = '-'
+    multiple = 8
+    unique   = true
+    required = optional
+    help     = "Syslog facility tag. Repeat to add multiple tags."
+  }
+
+  option debug-packets {
+    type       = bool
+    short      = '-'
+    default    = false
+    visible    = detail
+    required   = optional
+    depends-on = log-level
+    help       = "Dump raw packet hex alongside log output."
+    note       = "Only meaningful when --log-level is debug or trace."
+  }
+
+  option old-verbose {
+    type       = bool
+    default    = false
+    required   = optional
+    deprecated = "use --log-level debug since 1.0.0"
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Threading  (Linux / QNX only)
+// ---------------------------------------------------------------------------
+
+section "Threading" {
+  ifdef LINUX_BUILD || QNX_BUILD
+  description = "Worker thread pool configuration."
+
+  // Named choice types — declared here for immediate visibility
+  sched-policy = (SCHED_RR, SCHED_FIFO, SCHED_OTHER)
+
+  option workers {
+    type     = uint8 in 1..64
+    short    = 'w'
+    default  = 4
+    required = optional
+    help     = "Number of packet-processing worker threads."
+  }
+
+  option thread-sched {
+    type     = sched-policy
+    short    = '-'
+    default  = SCHED_OTHER
+    required = optional
+    help     = "Scheduling policy for worker threads."
+  }
+
+  option thread-prio {
+    type       = uint8 in 1..99
+    short      = '-'
+    default    = 50
+    required   = optional
+    depends-on = thread-sched
+    help       = "Thread priority (only meaningful for SCHED_RR and SCHED_FIFO)."
+    note       = "Has no effect when --thread-sched is SCHED_OTHER."
+  }
+
+  option affinity {
+    type     = uint64
+    short    = '-'
+    default  = 0x0
+    required = optional
+    help     = "CPU affinity bitmask (hex). 0x0 = no pinning."
+    ifdef    LINUX_BUILD
+    example  = "netmon --affinity 0x3 --workers 2"
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Hardware (embedded / SoC boards)
+// ---------------------------------------------------------------------------
+
+section "Hardware" {
+  ifkey board == rpi4
+  description = "Raspberry Pi 4 hardware-specific capture options."
+
+  option hw-timestamp {
+    type     = bool
+    short    = '-'
+    default  = true
+    required = optional
+    help     = "Use hardware timestamping from the NIC (where supported)."
+  }
+
+  option gpio-trigger {
+    type     = uint8 in 0..27
+    short    = '-'
+    default  = 17
+    required = optional
+    help     = "GPIO pin number used as an external capture trigger."
+  }
+}
+
+section "Hardware" {
+  ifkey board == s32g
+  description = "NXP S32G SoC-specific capture options."
+
+  option can-iface {
+    type     = string(length=16)
+    short    = '-'
+    default  = "can0"
+    required = optional
+    help     = "CAN interface used to receive frame-timing pulses."
+  }
+
+  option pulse-rate {
+    type         = frequency in 1Hz..100kHz
+    short        = '-'
+    default      = 1kHz
+    required     = optional
+    display-unit = kHz
+    help         = "Expected pulse rate on the CAN interface."
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Section: Debug  (dev_mode builds only)
+// ---------------------------------------------------------------------------
+
+section "Debug" {
+  ifkey dev_mode
+  description = "Developer and testing options."
+
+  option inject-pcap {
+    type     = file
+    short    = '-'
+    required = optional
+    visible  = detail
+    help     = "Replay packets from a .pcap file instead of live capture."
+    example  = "netmon --inject-pcap test-vectors/http.pcap"
+  }
+
+  option drop-rate {
+    type     = ratio
+    short    = '-'
+    default  = 0%
+    required = optional
+    visible  = never
+    help     = "Artificially drop this fraction of packets (chaos testing)."
+  }
+}

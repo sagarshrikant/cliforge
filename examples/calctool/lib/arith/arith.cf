@@ -1,0 +1,50 @@
+@schema cliforge v1
+
+/*!
+ *  arith — basic arithmetic operators for calctool.
+ *  Statically linked into the calctool binary.
+ *  Surfaced under --arith.* via: @import "lib/arith.cf" as arith
+ */
+
+meta {
+  app         = "arith"
+  brief       = "Basic arithmetic operators (+, -, *, /)"
+  prefix      = "arith"
+  output      = "cmdline_arith"
+  doc-title   = "arith Library Options"
+  description = "Options controlling the behaviour of the basic arithmetic operator library."
+}
+
+// Choice type — declared here for visibility next to the option that uses it
+div-zero-policy = (nan, inf, error, saturate)
+
+section "Arithmetic" {
+  description = "Runtime behaviour of arithmetic operations."
+
+  option div-zero {
+    type     = div-zero-policy
+    default  = error
+    required = optional
+    help     = "Behaviour when evaluating x / 0."
+    details  = "\
+      nan      — return IEEE 754 NaN. \
+      inf      — return +Inf or -Inf depending on sign of numerator. \
+      error    — return a parse/evaluation error code. \
+      saturate — return INT_MAX / INT_MIN (integer mode) or ±Inf (real mode). \
+    "
+  }
+
+  option epsilon {
+    type     = double in 0.0..1.0
+    default  = 1.0e-9
+    required = optional
+    help     = "Tolerance below which results are clamped to zero."
+  }
+
+  option rounding {
+    type     = (nearest, up, down, toward-zero, toward-inf)
+    default  = nearest
+    required = optional
+    help     = "Rounding rule applied at the end of every binary operation."
+  }
+}

@@ -1,0 +1,34 @@
+@schema 1
+
+meta {
+  prefix = "ws"
+  output = "cmdline_ws"
+  brief  = "Schema with sections for testing."
+}
+
+section "Network" {
+  option host {
+    type    = string(length=256)
+    default = "localhost"
+    help    = "Remote host name or IP address."
+  }
+
+  option port {
+    type    = uint16 in 1..65535
+    default = 8080
+    help    = "TCP port number."
+  }
+}
+
+section "Logging" {
+  option log-level {
+    type    = enum { debug, info, warn, error }
+    default = info
+    help    = "Minimum log level."
+  }
+
+  option log-file {
+    type = file
+    help = "Path to log file (empty = stderr)."
+  }
+}

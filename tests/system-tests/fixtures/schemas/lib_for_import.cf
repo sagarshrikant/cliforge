@@ -1,0 +1,21 @@
+@schema 1
+
+meta {
+  prefix = "lib"
+  output = "cmdline_lib"
+  brief  = "Library schema for @import testing."
+}
+
+section "Library options" {
+  option threshold {
+    type    = double
+    default = 0.5
+    help    = "Detection threshold."
+  }
+
+  option max-items {
+    type    = uint32 in 1..1024
+    default = 64
+    help    = "Maximum number of items to process."
+  }
+}

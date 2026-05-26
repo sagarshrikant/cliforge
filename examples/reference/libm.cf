@@ -1,0 +1,226 @@
+@schema cliforge v1
+
+/*!
+ *  libm — generic filter/transform library for netmon (dlopen plugin API)
+ *
+ *  Unlike arith.cf or libnet.cf (statically linked), this schema defines
+ *  the option surface for a dynamically-loaded (.so) plugin module.
+ *  It is NOT directly @import-ed in app.cf. Instead, the app's --plugin
+ *  option accepts a path=... sub-field that points to the .so file; the
+ *  plugin's own generated parser (produced from this .cf) is then called
+ *  by the plugin on its own slice of argv.
+ *
+ *  This schema demonstrates:
+ *    - Plugin/dlopen pattern: library authors write a .cf, ship the
+ *      generated cmdline.h/c with the .so, and parse their own args.
+ *    - Named compound types (struct-like records)
+ *    - named choice type + inline anonymous choice in the same schema
+ *    - ifkey conditional section (plugin feature only active when the
+ *      host app passes --key-words="have-stats")
+ *    - visible = never (diagnostic knob — parses but never documented)
+ *    - Multiple compound option (up to 4 transform stages)
+ *    - Frequency quantity type
+ */
+
+meta {
+  app         = "libm"
+  brief       = "Packet filter and transform plugin library"
+  version     = "1.0.0"
+  prefix      = "lm"
+  output      = "lm_cmdline"
+  doc-title   = "libm Plugin Option Reference"
+  description = "\
+    libm is a dynamically-loaded plugin that applies a configurable \
+    pipeline of filter and transform stages to each captured packet. \
+    Plugin authors ship this .cf alongside their .so; the generated \
+    parser is called at plugin init time to consume the plugin-local \
+    slice of the host application's argv."
+}
+
+/* ------------------------------------------------------------------ */
+section "Pipeline" {
+  description = "Filter/transform stage configuration."
+
+  /* Pipeline stage kind (extracted from inline choice for parser compat) */
+  stage-kind = (filter, transform, aggregate)
+
+  /* Named compound type — a single pipeline stage descriptor.          */
+  /* Multiple --lm.stage options build an ordered pipeline.            */
+  stage-spec = {
+    kind     : stage-kind,
+    name     : string,
+    weight   : uint8
+  }
+
+  option stage {
+    short    = 's'
+    type     = stage-spec
+    multiple = 4
+    required = optional
+    help     = "Add a filter/transform stage to the processing pipeline."
+    details  = "\
+      Fields: kind=filter|transform|aggregate, name=<stage-name>, \
+      weight=<0-255>. \
+      Stages are applied in the order they appear on the command line. \
+      Up to 4 stages may be specified."
+    example  = "--lm.stage kind=filter,name=ipv4-only,weight=10"
+    since    = "1.0"
+  }
+
+  option max-depth {
+    type     = uint8
+    default  = "8"
+    required = optional
+    help     = "Maximum protocol nesting depth to inspect."
+    details  = "\
+      Packets with more nesting levels than this value are passed \
+      through unmodified. Increasing the depth raises CPU cost per packet."
+    visible  = detail
+    since    = "1.0"
+  }
+
+  /* Named choice type for pass-through policy */
+  passthrough-policy = (pass, drop, mark)
+
+  option on-error {
+    type     = passthrough-policy
+    default  = "pass"
+    required = optional
+    help     = "Action taken when a stage produces a parse error."
+    details  = "\
+      'pass'  — forward the packet unchanged. \
+      'drop'  — silently discard the packet. \
+      'mark'  — set a flag in the packet metadata and forward."
+    since    = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Sampling" {
+  description = "Packet sampling and rate-limiting controls."
+
+  option sample-rate {
+    short    = 'R'
+    type     = ratio
+    default  = "1.0"
+    required = optional
+    help     = "Fraction of packets to process (0.0 – 1.0)."
+    details  = "\
+      1.0 processes every packet; 0.5 processes roughly one in two \
+      (selected uniformly at random). Values outside [0.0, 1.0] are \
+      rejected at parse time."
+    display-unit = "fraction"
+    since    = "1.0"
+  }
+
+  option rate-limit {
+    type     = frequency
+    default  = "0 Hz"
+    required = optional
+    help     = "Maximum processing rate. 0 Hz = unlimited."
+    details  = "\
+      When the instantaneous rate exceeds this value, excess packets \
+      are handled according to --lm.on-error. Useful for protecting \
+      downstream aggregators at high traffic volumes."
+    display-unit = "packets/s"
+    since    = "1.0"
+  }
+
+  option burst {
+    type       = uint32
+    default    = "64"
+    required   = optional
+    depends-on = rate-limit
+    help       = "Token-bucket burst size when --lm.rate-limit is active."
+    note       = "Only meaningful when --lm.rate-limit > 0 Hz."
+    visible    = detail
+    since      = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Output" {
+  description = "Processed-packet output format and sink."
+
+  /* Inline anonymous choice — used by a single option; no reuse needed */
+  option format {
+    short    = 'f'
+    type     = (raw, json, csv, msgpack)
+    default  = "raw"
+    required = optional
+    help     = "Serialisation format for processed packets written to the sink."
+    since    = "1.0"
+  }
+
+  option sink {
+    type     = string
+    default  = "-"
+    required = optional
+    help     = "Output sink: '-' for stdout, or a file path or UNIX socket path."
+    details  = "\
+      Paths starting with '/' are treated as filesystem paths; \
+      paths starting with '@' (Linux) or ending with '.sock' are \
+      treated as UNIX domain sockets."
+    since    = "1.0"
+  }
+
+  option flush-interval {
+    type     = duration
+    default  = "100 ms"
+    required = optional
+    help     = "How often to flush buffered output to the sink."
+    visible  = detail
+    since    = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stats section — only present when the host passes                  */
+/*      cliforge --key-words="have-stats"                              */
+/*  Without that key the section and all its options vanish from the   */
+/*  generated code and documentation entirely.                         */
+ifkey have-stats {
+  section "Statistics" {
+    description = "\
+      Internal instrumentation for the filter pipeline. \
+      Available only when the plugin is built with 'have-stats' active."
+
+    option stats-interval {
+      type     = duration
+      default  = "5 s"
+      required = optional
+      help     = "How often to emit internal pipeline statistics."
+      since    = "1.0"
+    }
+
+    option stats-sink {
+      type     = string
+      default  = "stderr"
+      required = optional
+      help     = "Destination for statistics output ('stderr', 'stdout', or a file path)."
+      since    = "1.0"
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Debug" {
+  description = "Diagnostic options for plugin developers."
+
+  option trace-stages {
+    type     = flag
+    required = optional
+    help     = "Print a one-line trace for each stage execution."
+    visible  = detail
+    since    = "1.0"
+  }
+
+  /* visible = never: parses silently; never appears in any --help output */
+  option _force-error-rate {
+    type     = ratio
+    default  = "0.0"
+    required = optional
+    visible  = never
+    since    = "1.0"
+  }
+}

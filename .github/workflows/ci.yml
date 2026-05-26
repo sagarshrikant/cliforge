@@ -1,0 +1,142 @@
+# =============================================================================
+# CI workflow for cliforge
+#
+# Triggers: push to any branch, pull requests targeting main.
+#
+# Jobs:
+#   build-and-test  — Release build + full ctest suite (87 tests)
+#   coverage        — Debug + coverage build, enforces 100% line coverage
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build and test — matrix over compiler and C standard
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            CC: gcc
+            CXX: g++
+          - compiler: clang
+            CC: clang
+            CXX: clang++
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build gcc g++ clang
+
+      - name: Configure (Release + tests)
+        env:
+          CC: ${{ matrix.CC }}
+          CXX: ${{ matrix.CXX }}
+        run: |
+          cmake -S . -B build \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCLIFORGE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure --parallel $(nproc)
+
+  # ---------------------------------------------------------------------------
+  # Coverage — gcc only, enforces 100% line coverage on src/
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build gcc g++ lcov
+
+      - name: Configure (Coverage + tests)
+        run: |
+          cmake -S . -B build-cov \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCLIFORGE_BUILD_TESTS=ON \
+                -DCLIFORGE_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build build-cov
+
+      - name: Generate coverage report
+        run: cmake --build build-cov --target cliforge_coverage
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build-cov/coverage-report/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Generated code compile check — C89 / C99 / C11
+  #
+  # This job verifies that the code cliforge *generates* compiles cleanly
+  # under all three C standards, which is part of the system test suite.
+  # It is extracted here as a named job for clear CI reporting.
+  # ---------------------------------------------------------------------------
+  generated-code-standards:
+    name: Generated Code (${{ matrix.std }})
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    strategy:
+      fail-fast: false
+      matrix:
+        std: [c89, c99, c11]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build gcc g++
+
+      - name: Configure (Release + tests)
+        run: |
+          cmake -S . -B build \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCLIFORGE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run generated-code system tests
+        run: |
+          ctest --test-dir build \
+                --output-on-failure \
+                -R "st_generated_code.*${{ matrix.std }}"

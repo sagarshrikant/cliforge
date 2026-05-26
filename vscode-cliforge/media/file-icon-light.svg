@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <rect width="16" height="16" rx="2" fill="#e8f0fe"/>
+  <text x="8" y="12" font-family="monospace" font-size="9" font-weight="bold"
+        text-anchor="middle" fill="#1a56db">.cf</text>
+</svg>

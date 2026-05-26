@@ -1,0 +1,75 @@
+@schema 1
+
+meta {
+  prefix = "at"
+  output = "cmdline_at"
+  brief  = "All-types schema for testing."
+}
+
+option flag-opt {
+  type    = flag
+  help    = "A flag option."
+}
+
+option bool-opt {
+  type    = bool
+  default = true
+  help    = "A bool option."
+}
+
+option int8-opt {
+  type    = sint8 in -128..127
+  default = -1
+  help    = "A sint8 option."
+}
+
+option uint32-opt {
+  type    = uint32
+  default = 42
+  help    = "A uint32 option."
+}
+
+option double-opt {
+  type    = double
+  default = 3.14
+  help    = "A double option."
+}
+
+option string-opt {
+  type    = string(length=64)
+  default = "hello"
+  help    = "A string option."
+}
+
+option file-opt {
+  type = file
+  help = "A file path option."
+}
+
+option dir-opt {
+  type = dir
+  help = "A directory path option."
+}
+
+option path-opt {
+  type = path
+  help = "A generic path option."
+}
+
+option enum-opt {
+  type    = (alpha, beta, gamma)
+  default = alpha
+  help    = "An inline-choice enum option."
+}
+
+option duration-opt {
+  type    = duration
+  default = 500ms
+  help    = "A duration option."
+}
+
+option bytes-opt {
+  type    = bytes
+  default = 4MiB
+  help    = "A bytes option."
+}

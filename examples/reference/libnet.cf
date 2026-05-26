@@ -1,0 +1,222 @@
+@schema cliforge v1
+
+/*!
+ *  libnet — statically-linked network control library for netmon
+ *
+ *  Imported in app.cf as:
+ *      @import "libnet.cf" as net
+ *
+ *  Surface options on the CLI as:
+ *      --net.buffer-size, --net.timeout, --net.retry-limit, …
+ *
+ *  Demonstrates:
+ *    - Library-oriented schema (no subcommands, no positional args)
+ *    - Named choice types declared inside a section for visual proximity
+ *    - Unit-aware quantity types (duration, bytes)
+ *    - depends-on within a library schema
+ *    - visible = detail for tuning-knob options
+ *    - sensitive = true on an auth credential option
+ *    - Multiple-value option (--net.source-ip repeatable up to 4)
+ *    - Conditional option block (ifdef ENABLE_TLS)
+ */
+
+meta {
+  app         = "libnet"
+  brief       = "Network I/O control library for netmon"
+  version     = "1.0.0"
+  prefix      = "net"
+  output      = "net_cmdline"
+  doc-title   = "libnet Option Reference"
+  description = "\
+    libnet manages raw-socket capture, connection timeouts, retry \
+    behaviour, and optional TLS wrapping for control-plane channels. \
+    All options are namespaced under --net.* when imported by an \
+    application schema."
+}
+
+/* ------------------------------------------------------------------ */
+section "Socket" {
+  description = "Raw-socket and buffer configuration."
+
+  /* Named choice type — declared here for visual proximity to the     */
+  /* options that use it; generates the same enum regardless of where  */
+  /* the declaration appears.                                           */
+  socket-domain = (inet, inet6, packet)
+
+  option domain {
+    type     = socket-domain
+    default  = "inet"
+    required = optional
+    help     = "Address family for the capture socket."
+    details  = "\
+      'inet' opens an AF_INET raw socket (IPv4 only). \
+      'inet6' opens an AF_INET6 raw socket (IPv6 only). \
+      'packet' opens an AF_PACKET socket and sees all L2 frames \
+      (Linux only; requires CAP_NET_RAW)."
+    since    = "1.0"
+  }
+
+  option buffer-size {
+    short    = 'b'
+    type     = bytes
+    default  = "2 MiB"
+    required = optional
+    help     = "Kernel receive-buffer size for the capture socket."
+    details  = "\
+      Passed to setsockopt(SO_RCVBUF). Larger values reduce drop \
+      probability at high packet rates but consume more kernel memory. \
+      The kernel may silently cap this to /proc/sys/net/core/rmem_max."
+    note     = "Effective range is system-dependent. Query with 'ss -m'."
+    since    = "1.0"
+  }
+
+  option snap-len {
+    short    = 's'
+    type     = uint16
+    default  = "65535"
+    required = optional
+    help     = "Maximum bytes captured per packet (snapshot length)."
+    details  = "\
+      Bytes beyond this limit are silently truncated. Use 0 to capture \
+      full frames (equivalent to UINT16_MAX)."
+    display-unit = "bytes"
+    since    = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Timing" {
+  description = "Timeout and retry parameters."
+
+  option timeout {
+    short    = 't'
+    type     = duration
+    default  = "500 ms"
+    required = optional
+    help     = "Per-operation socket timeout."
+    details  = "\
+      Applied to both read and write calls via SO_RCVTIMEO / SO_SNDTIMEO. \
+      Set to 0 to disable (blocking I/O)."
+    since    = "1.0"
+  }
+
+  option retry-limit {
+    short    = 'r'
+    type     = uint8
+    default  = "3"
+    required = optional
+    help     = "Maximum retry attempts on transient socket errors."
+    details  = "\
+      After 'retry-limit' consecutive EAGAIN / EINTR errors the \
+      operation fails with an error code. Set to 0 to disable retries."
+    since    = "1.0"
+  }
+
+  option retry-delay {
+    type       = duration
+    default    = "50 ms"
+    required   = optional
+    depends-on = retry-limit
+    help       = "Pause between consecutive retry attempts."
+    note       = "Only meaningful when --net.retry-limit is non-zero."
+    visible    = detail
+    since      = "1.0"
+  }
+
+  option keepalive-interval {
+    type     = duration
+    default  = "5 s"
+    required = optional
+    help     = "Interval between TCP keepalive probes on control sockets."
+    visible  = detail
+    since    = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section "Source" {
+  description = "Capture source addresses and interface binding."
+
+  option iface {
+    short    = 'i'
+    type     = string
+    required = mandatory
+    help     = "Network interface to capture from (e.g. 'eth0', 'en0')."
+    details  = "\
+      Pass the interface name as reported by 'ip link' or 'ifconfig'. \
+      On Linux with AF_PACKET the socket is bound to this interface; \
+      on other systems the name is passed to pcap_lookupdev()."
+    since    = "1.0"
+  }
+
+  option source-ip {
+    short    = 'S'
+    type     = string
+    multiple = 4
+    required = optional
+    help     = "Filter: capture only packets from these source addresses."
+    details  = "\
+      Accepts IPv4 dotted-decimal or IPv6 colon-hex notation. \
+      Specify up to 4 addresses; packets matching any entry are kept. \
+      Combine with --net.source-port for conjunctive filtering."
+    example  = "--net.source-ip 192.168.1.10 --net.source-ip 10.0.0.1"
+    since    = "1.0"
+  }
+
+  option source-port {
+    type       = uint16
+    multiple   = 8
+    required   = optional
+    depends-on = source-ip
+    help       = "Filter: capture only packets from these source ports."
+    note       = "Only meaningful when --net.source-ip is also set."
+    visible    = detail
+    since      = "1.0"
+  }
+}
+
+/* ------------------------------------------------------------------ */
+ifdef ENABLE_TLS {
+  section "TLS" {
+    description = "\
+      TLS wrapping for the optional control-plane channel. \
+      Available only when the library is built with ENABLE_TLS."
+
+    option tls-cert {
+      type     = file
+      required = optional
+      help     = "Path to the PEM-encoded TLS client certificate."
+      since    = "1.1"
+    }
+
+    option tls-key {
+      type      = file
+      required  = optional
+      depends-on = tls-cert
+      sensitive = true
+      help      = "Path to the PEM-encoded private key for the client certificate."
+      note      = "Value is suppressed in cmdline_dump() output and log callbacks."
+      since     = "1.1"
+    }
+
+    option tls-ca-bundle {
+      type     = file
+      required = optional
+      help     = "Path to a PEM CA bundle for server certificate verification."
+      details  = "\
+        If omitted, the system default CA store is used. \
+        Pass an empty string to disable peer verification (insecure)."
+      visible  = detail
+      since    = "1.1"
+    }
+
+    option tls-min-version {
+      type     = (tls12, tls13)
+      default  = "tls12"
+      required = optional
+      help     = "Minimum TLS version accepted."
+      visible  = detail
+      since    = "1.1"
+    }
+  }
+}

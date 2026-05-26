@@ -1,0 +1,56 @@
+@schema cliforge v1
+
+/*!
+ *  trig — trigonometry functions for calctool.
+ *  Shared library linked at build time via -ltrig.
+ *  Conditional: @import "lib/trig.cf" as trig  ifkey have-trig
+ */
+
+meta {
+  app         = "trig"
+  brief       = "Trigonometric ops (sin, cos, tan, asin, acos, atan2, ...)"
+  prefix      = "trig"
+  output      = "cmdline_trig"
+  doc-title   = "trig Library Options"
+  description = "Options controlling trigonometric function behaviour."
+}
+
+// Named choice type for angle units — placed here for immediate visibility
+angle-unit = (radians, degrees, gradians, turns)
+
+// Named choice type for numerical method
+trig-method = (taylor, cordic, lookup)
+
+section "Angles" {
+  description = "Angle unit and precision settings."
+
+  option units {
+    type     = angle-unit
+    short    = 'u'
+    default  = radians
+    required = optional
+    help     = "Unit used to interpret arguments to trig functions."
+    example  = "calctool --trig.units degrees eval 'sin(90)'"
+  }
+
+  option normalize {
+    type     = bool
+    default  = true
+    required = optional
+    help     = "Reduce input angle modulo 2π before evaluation."
+    note     = "Disable when computing values outside [0, 2π] intentionally."
+  }
+
+  option method {
+    type     = trig-method
+    default  = taylor
+    visible  = detail
+    required = optional
+    help     = "Numerical method for high-precision evaluation."
+    details  = "\
+      taylor  — Taylor series; good general purpose. \
+      cordic  — Iterative; better for fixed-point or SIMD. \
+      lookup  — Table-based; fastest but less precise. \
+    "
+  }
+}

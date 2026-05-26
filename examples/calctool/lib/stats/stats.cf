@@ -1,0 +1,47 @@
+@schema cliforge v1
+
+/*!
+ *  stats — basic statistics functions for calctool.
+ *  Shared library linked at build time via -lstats.
+ *  Conditional: @import "lib/stats.cf" as stats  ifkey have-stats
+ */
+
+meta {
+  app         = "stats"
+  brief       = "Statistics ops (mean, stddev, variance, median, ...)"
+  prefix      = "stats"
+  output      = "cmdline_stats"
+  doc-title   = "stats Library Options"
+  description = "Options controlling statistical function behaviour."
+}
+
+sampling-mode = (sample, population)
+
+section "Sampling" {
+  description = "Variance and standard deviation formula selection."
+
+  option mode {
+    type     = sampling-mode
+    default  = sample
+    required = optional
+    help     = "Use Bessel-corrected (n-1) divisor or plain n for variance/stddev."
+    details  = "\
+      sample     — divide by (n-1); unbiased estimator for a sample drawn from a population. \
+      population — divide by n; use when computing over the entire population. \
+    "
+  }
+
+  option max-points {
+    type     = uint32
+    default  = 1_000_000
+    required = optional
+    help     = "Maximum number of data points accepted by stats functions."
+  }
+
+  option epsilon {
+    type     = double in 0.0..1.0
+    default  = 1.0e-10
+    required = optional
+    help     = "Tolerance for incremental-mean convergence detection."
+  }
+}
