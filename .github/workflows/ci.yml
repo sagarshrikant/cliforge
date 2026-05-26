@@ -4,8 +4,10 @@
 # Runs on every push and pull request.
 # Think of this as the mandatory quality gate: nothing merges without a green build.
 #
-# Matrix: tests against GCC on Ubuntu 22.04 (primary target).
-# Add more matrix entries later for clang or RTOS/embedded cross-compile if needed.
+# Matrix: GCC (C99 + C11) and Clang-14 (C11) on Ubuntu 22.04.
+# clang-14 is pre-installed on the ubuntu-22.04 runner — installing the
+# generic 'clang' meta-package via apt conflicts with other LLVM packages
+# already present on the runner, so we use the versioned binary directly.
 # =============================================================================
 
 name: CI
@@ -18,37 +20,49 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (${{ matrix.compiler }}, C${{ matrix.c_std }})
+    name: Build & Test (${{ matrix.label }})
     runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          # C11 with GCC — primary
-          - compiler: gcc
+          # GCC C11 — primary target
+          - label: "gcc, C11"
+            cc: gcc
+            cxx: g++
             c_std: "11"
-          # C99 with GCC — compatibility check
-          - compiler: gcc
+            install_extra: "gcc g++"
+
+          # GCC C99 — backward-compatibility check
+          - label: "gcc, C99"
+            cc: gcc
+            cxx: g++
             c_std: "99"
-          # C11 with Clang — catch GCC-ism bugs early
-          - compiler: clang
+            install_extra: "gcc g++"
+
+          # Clang-14 C11 — catches GCC-specific assumptions early.
+          # clang-14 / clang++-14 are pre-installed on ubuntu-22.04;
+          # no apt install needed (avoids LLVM meta-package conflicts).
+          - label: "clang-14, C11"
+            cc: clang-14
+            cxx: clang++-14
             c_std: "11"
+            install_extra: ""
 
     env:
-      CC: ${{ matrix.compiler }}
-      CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
+      CC:  ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2   # v4.2.2+ runs on Node.js 20/24
 
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build \
-            ${{ matrix.compiler == 'gcc' && 'gcc g++' || 'clang clang++' }}
+            cmake ninja-build ${{ matrix.install_extra }}
 
       - name: Configure (C${{ matrix.c_std }})
         run: |
@@ -57,14 +71,14 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_STANDARD=${{ matrix.c_std }} \
             -DCLIFORGE_BUILD_TESTS=ON \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-            -DCMAKE_CXX_COMPILER=${{ env.CXX }}
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
 
       - name: Build
         run: cmake --build build
 
       - name: Run unit tests
-        run: ctest --test-dir build --output-on-failure -V
+        run: ctest --test-dir build -L unit --output-on-failure -V
 
       - name: Run system tests
         run: ctest --test-dir build -L system --output-on-failure -V
