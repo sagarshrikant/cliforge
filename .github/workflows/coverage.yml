@@ -58,18 +58,20 @@ jobs:
         run: ctest --test-dir build -L system --output-on-failure
 
       - name: Capture coverage
+        # Note: --ignore-errors mismatch is NOT used here because ubuntu-22.04
+        # ships lcov 1.14 which does not support that flag.  The mismatch
+        # warning only appears in lcov 2.x (used locally); on 1.14 it is not
+        # emitted so no suppression is needed.
         run: |
           lcov --capture \
                --directory build \
                --output-file coverage.info \
-               --ignore-errors mismatch,mismatch \
-               --rc geninfo_unexecuted_blocks=1 \
                --quiet
 
       - name: Filter out noise
-        # --ignore-errors unused,unused: lcov 2.x expands glob patterns against
-        # the real filesystem; patterns that don't match any coverage file are
-        # flagged as unused.  Safe to suppress — they just didn't apply.
+        # --ignore-errors unused is NOT used: ubuntu-22.04 ships lcov 1.14
+        # which does not support that flag and does not generate unused-pattern
+        # errors.  Both flags are lcov 2.x additions.
         run: |
           lcov --remove coverage.info \
                '*/usr/*' \
@@ -78,7 +80,6 @@ jobs:
                '*/tests/*' \
                '*/build*/*' \
                '*/cliforge_version.h' \
-               --ignore-errors unused,unused \
                --output-file coverage_filtered.info \
                --quiet
 
