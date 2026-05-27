@@ -257,9 +257,11 @@ cmake --build build-tests -j$(nproc)
 ctest --test-dir build-tests --output-on-failure
 
 # Coverage report (requires lcov)
-cmake -S . -B build-cov -DCLIFORGE_COVERAGE=ON -DCLIFORGE_BUILD_TESTS=ON
+cmake -S . -B build-cov \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCLIFORGE_COVERAGE=ON \
+      -DCLIFORGE_BUILD_TESTS=ON
 cmake --build build-cov -j$(nproc)
-ctest --test-dir build-cov -L coverage
 cmake --build build-cov --target cliforge_coverage
 # HTML report: build-cov/coverage-report/index.html
 ```
