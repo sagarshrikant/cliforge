@@ -88,19 +88,25 @@ All tests must pass before a PR can be merged. The CI pipeline enforces this.
 
 ```sh
 cmake -S . -B build-cov            \
+      -DCMAKE_BUILD_TYPE=Debug      \
       -DCLIFORGE_COVERAGE=ON        \
       -DCLIFORGE_BUILD_TESTS=ON
 
 cmake --build build-cov -j$(nproc)
-ctest --test-dir build-cov -L coverage
+
+# Single command: resets counters → runs unit + system tests → lcov → genhtml
 cmake --build build-cov --target cliforge_coverage
 
 # View: build-cov/coverage-report/index.html
 ```
 
-The `cliforge_coverage` target runs all tests, captures `.gcda` data, strips
-noise (system headers, gtest internals), and generates an HTML report via
-`genhtml`.
+The `cliforge_coverage` target resets counters, runs unit tests then system
+tests, captures `.gcda` data, strips noise (system headers, gtest internals),
+and generates an HTML report via `genhtml`.
+
+> **Note:** Do not run `ctest` manually before the coverage target — the target
+> resets counters and re-runs all tests itself. Running `ctest` first and then
+> the target means the reset step wipes your data.
 
 ---
 
@@ -225,23 +231,38 @@ standard library. Do not add external libraries to `src/`.
 
 ## Test policy
 
-### Coverage target
+### Coverage targets
 
-The project targets **100% line coverage** on all source files under `src/`.
-The CI coverage step will fail if any reachable line is uncovered.
+100% line coverage is not the goal. Tests written purely to hit lines add
+maintenance burden without catching real bugs. The targets below reflect what
+is meaningfully testable without fault-injection frameworks:
 
-### Justifying exclusions
+| Module | Line coverage | Function coverage | Notes |
+|--------|:---:|:---:|-------|
+| `cf_util.c` | ≥ 95 % | 100 % | Pure functions; fully testable |
+| `cf_lex.c` | ≥ 85 % | ≥ 90 % | Token paths are enumerable |
+| `cf_gen.c` | ≥ 80 % | ≥ 90 % | Many conditional output paths |
+| `cf_parse.c` | ≥ 80 % | ≥ 85 % | Error-recovery branches are hard to trigger |
+| **Overall** | **≥ 80 %** | **≥ 90 %** | CI enforces a floor; see below |
+
+**The CI floor is a ratchet** — it is set to the current overall line coverage
+and may only go up. A PR that drops overall coverage below the floor is
+rejected. The floor is raised in `.github/workflows/coverage.yml` whenever
+coverage genuinely improves.
+
+### Exempting truly unreachable lines
 
 If a line is genuinely unreachable in a testable build (defensive assert,
-OS-error branch), mark it with `/* LCOV_EXCL_LINE */` and add a comment
-explaining why:
+OS-level error that cannot be simulated), mark it with `/* LCOV_EXCL_LINE */`
+and add a comment explaining why:
 
 ```c
 if (fclose(fp) != 0)
-    return -1; /* LCOV_EXCL_LINE: OS error only */
+    return -1; /* LCOV_EXCL_LINE: fclose failure requires OS-level fault injection */
 ```
 
 Do not use `LCOV_EXCL_LINE` to hide untested code paths that should be tested.
+Each exclusion must be justified in the PR description.
 
 ### Adding tests
 
@@ -263,9 +284,12 @@ Before opening a PR, confirm:
 - [ ] `cmake --build build-tests -j$(nproc)` produces zero warnings.
 - [ ] `python3 tools/utest_agent/agent.py --prepr` exits 0 (or all gaps are
       justified with `LCOV_EXCL_LINE`).
+- [ ] Overall line coverage has not decreased (CI coverage floor enforces this).
+- [ ] New functions reach the per-module target (see Test policy table above).
+- [ ] Any `LCOV_EXCL_LINE` additions include a justifying comment and are
+      explained in the PR description.
 - [ ] New public functions have Doxygen blocks.
 - [ ] New schema features have unit tests and, where appropriate, system tests.
-- [ ] `LCOV_EXCL_LINE` lines have a justifying comment.
 - [ ] No dynamic allocation added to `src/` or to generator output templates.
 - [ ] Generated code still compiles under `gcc -std=c89 -Wall -Wextra
   -Wpedantic` (run the `st_generated_code` system tests).

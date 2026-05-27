@@ -13,10 +13,16 @@
 #    coverage   -- all tests; run under a coverage build
 #
 #  Coverage build:
-#    cmake -S .. -B ../build-cov -DCLIFORGE_COVERAGE=ON -DCLIFORGE_BUILD_TESTS=ON
-#    cmake --build ../build-cov
-#    ctest --test-dir ../build-cov -L coverage
-#    cmake --build ../build-cov --target cliforge_coverage
+#    cmake -S . -B build-cov \
+#          -DCLIFORGE_COVERAGE=ON \
+#          -DCLIFORGE_BUILD_TESTS=ON \
+#          -DCMAKE_BUILD_TYPE=Debug
+#    cmake --build build-cov -j$(nproc)
+#    cmake --build build-cov --target cliforge_coverage
+#    # HTML report: build-cov/coverage-report/index.html
+#
+#  NOTE: do NOT run ctest manually before cliforge_coverage — the target
+#  resets counters and re-runs tests itself. Running ctest twice wipes the data.
 # =============================================================================
 
 cmake_minimum_required(VERSION 3.16)
@@ -131,23 +137,45 @@ if(CLIFORGE_COVERAGE)
                              --zerocounters
                              --quiet
 
-        # 2. Run all tests
-        COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L coverage
+        # 2. Run tests — unit tests exercise cliforge_objects (the instrumented
+        #    object library); system tests exercise the cliforge binary itself.
+        #    --test-dir is required: CMAKE_CTEST_COMMAND inside a custom target
+        #    does not automatically inherit the build directory as test root.
+        # ctest is run from WORKING_DIRECTORY (= CMAKE_BINARY_DIR) — equivalent
+        # to "cd build-cov && ctest".  Do NOT use --test-dir: in cmake 3.28,
+        # that flag does not load gtest POST_BUILD-discovered tests correctly.
+        COMMAND ${CMAKE_CTEST_COMMAND}
+                    --output-on-failure
+                    -L unit
+        COMMAND ${CMAKE_CTEST_COMMAND}
+                    --output-on-failure
+                    -L system
 
         # 3. Capture coverage data
+        # --ignore-errors mismatch: GCC 12+ changed the gcov format; older lcov
+        # versions report "mismatched end line" for inlined/template code.
+        # --rc geninfo_unexecuted_blocks=1: treat unexecuted blocks as zero
+        # instead of emitting a warning that stops processing.
         COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR}
                              --capture
                              --output-file ${COVERAGE_INFO}
+                             --ignore-errors mismatch,mismatch
+                             --rc geninfo_unexecuted_blocks=1
                              --quiet
 
-        # 4. Remove noise: system headers, gtest internals, generated cmdline files
+        # 4. Remove noise: system headers, gtest internals, generated files.
+        # lcov 2.x expands glob patterns against the real filesystem, so
+        # /usr/* becomes /usr/bin, /usr/lib, etc. — each an "unused" pattern
+        # if that path has no coverage data.  --ignore-errors unused,unused
+        # (double token required by lcov 2.x) silences all of these safely.
         COMMAND ${LCOV_PATH} --remove ${COVERAGE_INFO}
-                             "/usr/*"
+                             "*/usr/*"
                              "*/googletest/*"
                              "*/googlemock/*"
                              "*/tests/*"
                              "*/build*/*"
                              "*/cliforge_version.h"
+                             --ignore-errors unused,unused
                              --output-file ${COVERAGE_CLEAN}
                              --quiet
 

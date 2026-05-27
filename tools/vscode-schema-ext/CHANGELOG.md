@@ -2,6 +2,11 @@
 
 All notable changes to the **cliforge** VS Code extension will be documented in this file.
 
+## [0.2.1] - 2026-05-27
+
+### Fixed
+- No extension changes — version bump to align with cliforge tool release.
+
 ## [0.2.0] - 2026-05-27
 
 ### Fixed

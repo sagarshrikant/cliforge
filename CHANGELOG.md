@@ -7,6 +7,36 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.2.1] — 2026-05-27
+
+### Fixed
+
+- Coverage target (`cliforge_coverage`) now correctly runs both unit tests
+  (76 tests, labeled `unit`) and system tests (11 tests, labeled `system`).
+  Previously only system tests ran, underreporting line coverage.
+- Fixed `gtest_discover_tests PROPERTIES LABELS` label application: switched
+  from `TEST_LIST` + `set_tests_properties` (configure-time no-op) back to
+  `PROPERTIES LABELS unit` (applied at POST_BUILD discovery time).
+- Suppressed `geninfo` `mismatch,mismatch` warnings from GCC 13 / lcov 2.x
+  gcov format changes affecting C++ test bodies.
+- Suppressed `lcov` `unused,unused` pattern warnings on ARM64 hosts where
+  `/usr/*` glob expands to arch-specific subdirectories with no coverage data.
+- Coverage workflow (`.github/workflows/coverage.yml`) updated to use
+  `CLIFORGE_COVERAGE=ON` CMake flag instead of raw compiler flags, aligning
+  it with the local `cliforge_coverage` CMake target.
+- Added coverage regression gate to CI: overall line coverage must not drop
+  below the current floor (ratchet — floor only moves up).
+
+### Changed
+
+- Coverage policy updated from "100% line coverage required" to a tiered
+  per-module target (see CONTRIBUTING.md § Test policy). The CI floor is
+  a ratchet set to the current measured baseline.
+- `CONTRIBUTING.md` coverage section corrected: removed stale `ctest -L coverage`
+  command; the `cliforge_coverage` target runs tests internally.
+
+[0.2.1]: https://github.com/sagarshrikant/cliforge/compare/v0.2.0...v0.2.1
+
 ## [0.2.0] — 2026-05-27
 
 ### Added

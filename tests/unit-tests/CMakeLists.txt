@@ -26,8 +26,12 @@ macro(cliforge_unit_test TARGET)
     # C++17: enough for EXPECT_THAT, string_view, filesystem in tests
     set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 17)
 
+    # PROPERTIES LABELS applies the label at POST_BUILD discovery time.
+    # Use a single label string without semicolons — semicolons in the
+    # PROPERTIES argument are misinterpreted as CMake list separators by
+    # some cmake versions, causing the label to silently not be applied.
     gtest_discover_tests(${TARGET}
-        PROPERTIES LABELS "unit;coverage"
+        PROPERTIES LABELS unit
     )
 endmacro()
 

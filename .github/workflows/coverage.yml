@@ -1,11 +1,16 @@
 # =============================================================================
-# coverage.yml — lcov Coverage Report
+# coverage.yml — lcov Coverage Report + Regression Gate
 # =============================================================================
-# Runs on every push to main and on pull requests.
-# Generates an lcov report and posts a summary as a PR comment.
+# Runs on every push to main and on every pull request targeting main.
 #
-# The coverage badge in README.md is driven by the Coveralls/Codecov upload
-# step at the bottom — uncomment whichever service you sign up for.
+# Jobs:
+#   coverage — build with gcov instrumentation, run all tests, generate lcov
+#              HTML report, enforce coverage floor (no regressions allowed).
+#
+# Coverage policy (see CONTRIBUTING.md § Test policy):
+#   - Overall line coverage must not drop below COVERAGE_FLOOR.
+#   - COVERAGE_FLOOR is a ratchet: raise it as coverage improves, never lower.
+#   - 100% is not the goal; well-tested error paths and new features matter more.
 # =============================================================================
 
 name: Coverage
@@ -15,6 +20,10 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
+env:
+  # Raise this floor as overall coverage improves. Never lower it.
+  COVERAGE_FLOOR: "52"
 
 jobs:
   coverage:
@@ -31,46 +40,53 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build gcc g++ lcov
 
-      - name: Configure with coverage flags
+      - name: Configure (Debug + coverage instrumentation)
         run: |
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCLIFORGE_BUILD_TESTS=ON \
-            -DCMAKE_C_FLAGS="--coverage -O0" \
-            -DCMAKE_CXX_FLAGS="--coverage -O0" \
-            -DCMAKE_EXE_LINKER_FLAGS="--coverage"
+            -DCLIFORGE_COVERAGE=ON
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -j$(nproc)
 
-      - name: Zero coverage counters
-        run: lcov --zerocounters --directory build --quiet
+      - name: Run unit tests
+        run: ctest --test-dir build -L unit --output-on-failure
 
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+      - name: Run system tests
+        run: ctest --test-dir build -L system --output-on-failure
 
       - name: Capture coverage
         run: |
           lcov --capture \
                --directory build \
                --output-file coverage.info \
-               --rc lcov_branch_coverage=1 \
+               --ignore-errors mismatch,mismatch \
+               --rc geninfo_unexecuted_blocks=1 \
                --quiet
 
-      - name: Filter out system headers and test code
+      - name: Filter out noise
+        # --ignore-errors unused,unused: lcov 2.x expands glob patterns against
+        # the real filesystem; patterns that don't match any coverage file are
+        # flagged as unused.  Safe to suppress — they just didn't apply.
         run: |
           lcov --remove coverage.info \
-               '*/googletest*' '*/usr/*' '*/_deps/*' '*/tests/*' '*/build/*' \
+               '*/usr/*' \
+               '*/googletest/*' \
+               '*/googlemock/*' \
+               '*/tests/*' \
+               '*/build*/*' \
+               '*/cliforge_version.h' \
+               --ignore-errors unused,unused \
                --output-file coverage_filtered.info \
-               --rc lcov_branch_coverage=1 \
                --quiet
 
       - name: Generate HTML report
         run: |
           genhtml coverage_filtered.info \
                   --output-directory coverage_html \
-                  --branch-coverage \
+                  --title "cliforge coverage" \
                   --quiet
 
       - name: Upload HTML report as artifact
@@ -84,9 +100,28 @@ jobs:
         run: |
           echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          lcov --summary coverage_filtered.info \
-               --rc lcov_branch_coverage=1 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          lcov --summary coverage_filtered.info 2>&1 | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce coverage floor
+        # Extracts the line-coverage percentage and fails if it drops below
+        # COVERAGE_FLOOR.  This is a ratchet — raise the floor in env: above
+        # as coverage improves; never lower it.
+        run: |
+          LINES=$(lcov --summary coverage_filtered.info 2>&1 \
+                  | grep -oP '\d+\.\d+(?=% \()' | head -1)
+          echo "Line coverage: ${LINES}%  (floor: ${COVERAGE_FLOOR}%)"
+          echo "line_coverage=${LINES}" >> $GITHUB_STEP_SUMMARY
+          python3 - <<EOF
+          import sys
+          cov   = float("${LINES}")
+          floor = float("${COVERAGE_FLOOR}")
+          if cov < floor:
+              print(f"FAIL: coverage {cov:.1f}% is below floor {floor:.0f}%")
+              print("Either add tests or raise the floor after deliberate review.")
+              sys.exit(1)
+          print(f"OK: coverage {cov:.1f}% >= floor {floor:.0f}%")
+          EOF
 
       # ── Optional: upload to Coveralls ─────────────────────────────────────
       # Sign up at https://coveralls.io and add COVERALLS_REPO_TOKEN to
