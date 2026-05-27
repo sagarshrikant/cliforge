@@ -2,6 +2,10 @@
 
 **Schema-driven command-line parser generator for C, C++, and Rust.**
 
+> **🚀 Release 0.2.0** — AI-powered unit test advisor (`tools/utest_agent`),
+> full CI/CD pipeline, VSCode schema extension, and coverage reporting.
+> See [CHANGELOG.md](CHANGELOG.md) for details.
+
 cliforge reads a declarative schema file (`.cf`) and emits a self-contained
 `cmdline.c` / `cmdline.h` pair that parses `argc`/`argv` with no runtime
 dependencies. The generated code is fully compatible with C89, C99, and C11,
@@ -50,6 +54,11 @@ Key capabilities beyond traditional parser generators:
 
 - **VSCode extension.** Syntax highlighting, hover docs, and schema validation
   for `.cf` files — see [`tools/vscode-schema-ext/`](tools/vscode-schema-ext/).
+
+- **AI unit test advisor.** `tools/utest_agent` analyses git diffs and lcov
+  coverage data and suggests GTest additions, removals, and updates using the
+  Claude API or a local Ollama model. Works offline — no API key required when
+  using Ollama. See [`tools/utest_agent/README.md`](tools/utest_agent/README.md).
 
 ---
 
@@ -194,21 +203,28 @@ never collide even when libraries evolve independently.
 
 ```
 cliforge/
-├── src/                 # cliforge generator source (pure C)
-│   ├── cf_lex.c/h       # Schema lexer
-│   ├── cf_parse.c/h     # Recursive-descent parser → AST
-│   ├── cf_gen.c/h       # Code generator (C + Markdown)
-│   └── cf_util.c/h      # Shared utilities
+├── src/                          # cliforge generator source (pure C)
+│   ├── cf_lex.c/h                # Schema lexer
+│   ├── cf_parse.c/h              # Recursive-descent parser → AST
+│   ├── cf_gen.c/h                # Code generator (C + Markdown)
+│   └── cf_util.c/h               # Shared utilities
 ├── tests/
-│   ├── unit-tests/      # gtest suites per source file
-│   └── system-tests/    # Black-box binary + compile tests
+│   ├── unit-tests/               # GTest suites per source file
+│   └── system-tests/             # Black-box binary + compile tests
 ├── docs/
-│   ├── spec/            # Full schema language reference (SPEC.md)
-│   └── user-guide/      # Practical authoring guide (index.md)
+│   ├── spec/                     # Full schema language reference (SPEC.md)
+│   └── user-guide/               # Practical authoring guide (index.md)
 ├── examples/
-│   ├── calctool/        # Canonical multi-library example
-│   └── reference/       # Feature-complete reference schemas
-├── tools/vscode-schema-ext/  # VSCode extension for .cf schema files
+│   ├── calctool/                 # Canonical multi-library example
+│   └── reference/                # Feature-complete reference schemas
+├── tools/
+│   ├── utest_agent/              # AI unit test advisor (Python, Claude/Ollama)
+│   ├── vscode-schema-ext/        # VSCode extension for .cf schema files
+│   └── vscode-utest-extension/   # VSCode extension for utest_agent reports
+└── .github/workflows/
+    ├── ci.yml                    # Build + unit tests (gcc/clang matrix)
+    ├── coverage.yml              # lcov coverage report
+    └── release.yml               # .deb + .tar.gz GitHub release
 ```
 
 ---
@@ -221,7 +237,10 @@ cliforge/
 | [User Guide](docs/user-guide/index.md) | First-time schema authors |
 | [calctool example](examples/calctool/README.md) | Hands-on multi-library walkthrough |
 | [Reference schemas](examples/reference/README.md) | Feature-complete schema showcase |
+| [AI test advisor](tools/utest_agent/README.md) | Contributors, CI users |
+| [VSCode extension](tools/vscode-schema-ext/README.md) | Schema authors using VSCode |
 | [Contributing](CONTRIBUTING.md) | Contributors |
+| [Changelog](CHANGELOG.md) | All users |
 
 ---
 

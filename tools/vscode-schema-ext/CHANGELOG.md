@@ -2,6 +2,12 @@
 
 All notable changes to the **cliforge** VS Code extension will be documented in this file.
 
+## [0.2.0] - 2026-05-27
+
+### Fixed
+- False-positive `missing-quantity-display-unit` diagnostic: warning no longer
+  fires when a `display-unit` qualifier is already present on the option.
+
 ## [0.1.0] - 2026-05-20
 
 ### Added

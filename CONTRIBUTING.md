@@ -11,10 +11,11 @@ setup, coding standards, test requirements, and pull-request process.
 2. [Building from source](#building-from-source)
 3. [Running the test suite](#running-the-test-suite)
 4. [Coverage report](#coverage-report)
-5. [Coding standards](#coding-standards)
-6. [Test policy](#test-policy)
-7. [Pull request checklist](#pull-request-checklist)
-8. [Project layout](#project-layout)
+5. [AI test advisor](#ai-test-advisor)
+6. [Coding standards](#coding-standards)
+7. [Test policy](#test-policy)
+8. [Pull request checklist](#pull-request-checklist)
+9. [Project layout](#project-layout)
 
 ---
 
@@ -26,6 +27,7 @@ setup, coding standards, test requirements, and pull-request process.
 | GCC or Clang | GCC 7 / Clang 6 | C and C++ compiler |
 | g++ / clang++ | Same | Required only for building tests |
 | lcov + genhtml | 1.14 | Coverage report only |
+| Python 3 | 3.9 | AI test advisor only |
 | Git | any | |
 
 No external C libraries are required. cliforge has zero runtime dependencies.
@@ -68,7 +70,7 @@ cmake -S . -B build-tests          \
 
 cmake --build build-tests -j$(nproc)
 
-# Run all 87 tests
+# Run all tests
 ctest --test-dir build-tests --output-on-failure
 
 # Run only unit tests
@@ -99,6 +101,66 @@ cmake --build build-cov --target cliforge_coverage
 The `cliforge_coverage` target runs all tests, captures `.gcda` data, strips
 noise (system headers, gtest internals), and generates an HTML report via
 `genhtml`.
+
+---
+
+## AI test advisor
+
+cliforge ships an AI-powered unit test advisor in `tools/utest_agent/`. It
+reads your `git diff`, maps changed functions to their test folders, optionally
+runs the full build→test→lcov pipeline, and produces a report recommending
+which GTest cases to add, update, or remove. It supports two LLM backends:
+**Claude** (cloud, best quality) and **Ollama** (local, no API key needed).
+
+Think of it as a colleague who always reviews your diff and asks "did you write
+tests for this?" — but it also checks the coverage numbers.
+
+### Setup (Linux / WSL)
+
+```sh
+# System packages
+sudo apt install -y cmake ninja-build gcc g++ lcov python3 python3-pip zstd
+
+# Python dependencies
+pip3 install --break-system-packages -r tools/utest_agent/requirements.txt
+
+# Claude API key (if using Claude backend)
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Ollama setup — one-time, pulls ~5 GB model
+bash tools/utest_agent/setup_ollama.sh
+```
+
+### Usage
+
+```sh
+# Fast: diff-only analysis (Claude)
+python3 tools/utest_agent/agent.py
+
+# Fast: diff-only analysis (Ollama, offline)
+python3 tools/utest_agent/agent.py --llm ollama
+
+# Full pipeline: build → ctest → lcov → AI report
+python3 tools/utest_agent/agent.py --with-build
+
+# Pre-PR gate: exits 1 if coverage or tests are not ready
+python3 tools/utest_agent/agent.py --prepr
+
+# Analyse a specific file
+python3 tools/utest_agent/agent.py --file src/cf_util.c
+
+# Save report
+python3 tools/utest_agent/agent.py --output utest_report.md
+```
+
+See [`tools/utest_agent/README.md`](tools/utest_agent/README.md) for full
+documentation including all modes, Ollama model recommendations, and VSCode
+integration.
+
+### VSCode tasks
+
+All agent modes are wired up as VSCode tasks in `.vscode/tasks.json`.
+Open them with `Ctrl+Shift+P → Tasks: Run Task → utest …`.
 
 ---
 
@@ -199,6 +261,8 @@ Before opening a PR, confirm:
 
 - [ ] `ctest --test-dir build-tests --output-on-failure` shows 0 failures.
 - [ ] `cmake --build build-tests -j$(nproc)` produces zero warnings.
+- [ ] `python3 tools/utest_agent/agent.py --prepr` exits 0 (or all gaps are
+      justified with `LCOV_EXCL_LINE`).
 - [ ] New public functions have Doxygen blocks.
 - [ ] New schema features have unit tests and, where appropriate, system tests.
 - [ ] `LCOV_EXCL_LINE` lines have a justifying comment.
@@ -218,20 +282,20 @@ cliforge/
 │   ├── cf_lex.c/h        # Schema lexer
 │   ├── cf_parse.c/h      # Recursive-descent parser → AST
 │   ├── cf_gen.c/h        # Code generator (C + Markdown output)
-│   ├── cf_ast.h          # AST node types (shared between parser and generator)
+│   ├── cf_ast.h          # AST node types
 │   └── cf_util.c/h       # Shared utility functions
 ├── include/
 │   └── cliforge_version.h.in   # CMake-filled version header template
 ├── tests/
-│   ├── CMakeLists.txt    # Test infrastructure (FetchContent gtest, OBJECT lib)
 │   ├── unit-tests/
 │   │   ├── ut_cf_lex/    # Lexer tests
 │   │   ├── ut_cf_parse/  # Parser tests (meta, option, import)
-│   │   └── ut_cf_gen/    # Generator tests
+│   │   ├── ut_cf_gen/    # Generator tests
+│   │   └── ut_cf_util/   # Utility function tests
 │   └── system-tests/
 │       ├── fixtures/     # .cf schema fixtures (valid and deliberately broken)
 │       ├── st_pipeline/  # End-to-end: schema → generate → file existence
-│       ├── st_error_cases/   # Error schemas must exit non-zero with stderr
+│       ├── st_error_cases/    # Error schemas must exit non-zero with stderr
 │       └── st_generated_code/ # Generated .c compiles under C89/C99/C11
 ├── docs/
 │   ├── spec/             # Schema language specification (SPEC.md)
@@ -239,6 +303,13 @@ cliforge/
 ├── examples/
 │   ├── calctool/         # Canonical multi-library example
 │   └── reference/        # Feature-complete reference schemas
-├── cmake/                # Helper CMake modules
-└── tools/vscode-schema-ext/  # VSCode syntax + LSP extension for .cf files
+├── .github/
+│   └── workflows/
+│       ├── ci.yml        # Build + test matrix (gcc C99/C11, clang-14 C11)
+│       ├── coverage.yml  # lcov report on every push to main
+│       └── release.yml   # .deb + .tar.gz on version tag push
+└── tools/
+    ├── utest_agent/           # AI-powered unit test advisor (Claude + Ollama)
+    ├── vscode-schema-ext/     # VSCode LSP extension for .cf schema files
+    └── vscode-utest-extension/ # VSCode UI wrapper for utest_agent
 ```
