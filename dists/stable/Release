@@ -1,0 +1,24 @@
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Sun, 07 Jun 2026 17:13:07 +0000
+Description: cliforge apt repository
+Label: cliforge
+Origin: cliforge
+Suite: stable
+MD5Sum:
+ 9e417a04f14d17a9bb394a28ab7afd1f              177 Release
+ ce804b59f56b300ebf2a0c2d371c2200              858 main/binary-amd64/Packages
+ 37e5baca17b2e222cd4629a961fc3d30              600 main/binary-amd64/Packages.gz
+SHA1:
+ a8f2e622f4b79457856d1d33a38491060619e8db              177 Release
+ 3e9ab3e8d4d9efac402526f264d3731b5975c5e4              858 main/binary-amd64/Packages
+ fdfd316a1443f655e7f441d5cccb03109061a84c              600 main/binary-amd64/Packages.gz
+SHA256:
+ 09040ae98acfee7ec6499c28fa582f95b7bb08827794a9a2190a36f28be4014a              177 Release
+ 35ce04dcdd94a474ddb535ee84fead24269b1f81248e7004b4911950cad1496f              858 main/binary-amd64/Packages
+ df2062eda70991360a4fc02c87a7a54c234e68a2d3947e0e5cd3cc6ad6779bf0              600 main/binary-amd64/Packages.gz
+SHA512:
+ a32ad612bc8c7c3bceb2e854a8d44da28c274a650814c1d27754e733790d380d1175ac4c8a435e9782bbf3a746f255e0f4f2a4907ad996b420f0891c8be051a0              177 Release
+ db46f5b90568e0d9b8b4a9ab945126379dbde1d14172a4e9da46726e1b5111ffedafad73bd82e9975bbbdc32ce8b1a9fc72fef69eb933ba0fb851fd55dc64ac1              858 main/binary-amd64/Packages
+ e7730a0ddc1a813fecc0af510b7a05b8bf8b21e9f7dd369473fd89bf7ddcccbf1a2dc220663096bd8082410deab0416f5a9a7850286e273359dc8d8b37b2513b              600 main/binary-amd64/Packages.gz

@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>cliforge apt repository</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:760px;margin:3rem auto;padding:0 1rem;line-height:1.5}
+ pre{background:#f4f4f4;padding:1rem;border-radius:8px;overflow:auto}
+ code{font-family:ui-monospace,monospace}
+ h1{margin-bottom:0}.sub{color:#666}
+</style>
+<h1>cliforge apt repository</h1>
+<p class="sub">CLI parser-generator for C89/C99/C11 projects.</p>
+
+<h2>Install</h2>
+<pre><code># 1. Add the signing key
+curl -fsSL https://sagarshrikant.github.io/cliforge/cliforge-archive-keyring.gpg | sudo tee /usr/share/keyrings/cliforge-archive-keyring.gpg > /dev/null
+
+# 2. Add the repository
+echo "deb [signed-by=/usr/share/keyrings/cliforge-archive-keyring.gpg] https://sagarshrikant.github.io/cliforge stable main" \
+  | sudo tee /etc/apt/sources.list.d/cliforge.list
+
+# 3. Install
+sudo apt update
+sudo apt install cliforge</code></pre>
+
+<p>Updates arrive through normal <code>sudo apt update &amp;&amp; sudo apt upgrade</code>.</p>
+<p>Source &amp; releases: <a href="https://github.com/shrikant-sagar/cliforge">github.com/shrikant-sagar/cliforge</a></p>
