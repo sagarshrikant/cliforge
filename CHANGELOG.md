@@ -7,35 +7,69 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.2.1] — 2026-05-27
+## [0.3.0] — 2026-06-07
+
+### Added
+
+- **Signed APT repository on GitHub Pages** for `sudo apt install cliforge`.
+  A new `apt-repo.yml` workflow runs on each version tag: it builds the `.deb`,
+  merges it into the repo already published on the `gh-pages` branch, and
+  regenerates + GPG-signs the metadata (`apt-ftparchive` + `gpg`), so older
+  versions stay installable and `apt upgrade` picks up new ones. Packaging logic
+  is now centralised in `tools/packaging/build-deb.sh` (shared by `release.yml`
+  and `apt-repo.yml`); the repository assembler lives in
+  `tools/apt-repo/build-apt-repo.sh`. The `.deb` remains attached to each GitHub
+  Release as well, for direct `sudo apt install ./cliforge_*.deb` use.
+
+- **Reproducible dev container** (`.devcontainer/`): An Ubuntu 22.04 image that
+  mirrors the CI runners (gcc + clang-14) and adds everything a contributor
+  needs locally — `cmake`, `ninja`, `gdb`, `lcov`, `valgrind`, the docs
+  toolchain (`doxygen`, `graphviz`, Sphinx + Breathe + Furo), the AI test
+  advisor's Python dependencies, Ollama (binary only; pull the model on first
+  use), and packaging tools (`dpkg-dev`, `fakeroot`, `rpm`). Contributors can
+  `docker build` it directly or use VSCode "Reopen in Container".
+
+- **`.devcontainer/devcontainer.json`**: VSCode Dev Containers definition that
+  builds the image, attaches as a non-root `dev` user, installs the C/C++,
+  CMake, and Python extensions, and enables `ptrace` so GDB works in-container.
+
+- **`.dockerignore`**: Keeps build trees, coverage output, virtualenvs, and
+  node/VSIX artefacts out of the Docker build context.
+
+- **`.vscode/launch.json`**: GDB-backed F5 debug configurations — debug the
+  generator on `calctool.cf` or on the currently open `.cf` file, debug any
+  unit-test binary via a picker (with an optional `--gtest_filter`), and an
+  attach-to-process config.
+
+- **`.vscode/c_cpp_properties.json`**: IntelliSense configuration driven by the
+  generated `compile_commands.json`.
 
 ### Fixed
 
-- Coverage target (`cliforge_coverage`) now correctly runs both unit tests
-  (76 tests, labeled `unit`) and system tests (11 tests, labeled `system`).
-  Previously only system tests ran, underreporting line coverage.
-- Fixed `gtest_discover_tests PROPERTIES LABELS` label application: switched
-  from `TEST_LIST` + `set_tests_properties` (configure-time no-op) back to
-  `PROPERTIES LABELS unit` (applied at POST_BUILD discovery time).
-- Suppressed `geninfo` `mismatch,mismatch` warnings from GCC 13 / lcov 2.x
-  gcov format changes affecting C++ test bodies.
-- Suppressed `lcov` `unused,unused` pattern warnings on ARM64 hosts where
-  `/usr/*` glob expands to arch-specific subdirectories with no coverage data.
-- Coverage workflow (`.github/workflows/coverage.yml`) updated to use
-  `CLIFORGE_COVERAGE=ON` CMake flag instead of raw compiler flags, aligning
-  it with the local `cliforge_coverage` CMake target.
-- Added coverage regression gate to CI: overall line coverage must not drop
-  below the current floor (ratchet — floor only moves up).
+- **`-o`/`--output` was ignored when it followed the schema argument.** The CLI
+  parsed argv in a single pass and generated each file the moment it was seen,
+  using whatever output directory had been set *so far* — so `schema.cf -o out`
+  silently wrote to the current directory while `-o out schema.cf` worked.
+  `main.c` now parses all options first and generates afterwards, so option
+  order no longer matters. A missing `-o` argument and a non-writable target
+  directory now produce clear errors and a non-zero exit. Added the
+  `st_output_dir_ordering` system test covering all three argument orderings
+  (`-o` before, `-o` after, and `--output=` joined form) with a leak check.
 
 ### Changed
 
-- Coverage policy updated from "100% line coverage required" to a tiered
-  per-module target (see CONTRIBUTING.md § Test policy). The CI floor is
-  a ratchet set to the current measured baseline.
-- `CONTRIBUTING.md` coverage section corrected: removed stale `ctest -L coverage`
-  command; the `cliforge_coverage` target runs tests internally.
+- **`.vscode/tasks.json`**: Reworked build/test tasks into clear Debug (`build/`)
+  and Release (`build-release/`) trees, plus a coverage-instrumented configure
+  and dedicated unit-/system-/all-test runners. The existing utest_agent tasks
+  are unchanged.
 
-[0.2.1]: https://github.com/sagarshrikant/cliforge/compare/v0.2.0...v0.2.1
+- **`CMakeLists.txt`**: Bumped project version to 0.3.0 and enabled
+  `CMAKE_EXPORT_COMPILE_COMMANDS` so editors resolve includes/macros accurately.
+
+- **`CONTRIBUTING.md`**: Added a "Developing in a container" section covering
+  the Docker and VSCode Dev Containers workflows and the F5 debug/test loop.
+
+---
 
 ## [0.2.0] — 2026-05-27
 
@@ -122,5 +156,6 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CMake build system with `CLIFORGE_BUILD_TESTS` and `CLIFORGE_COVERAGE` options.
 - GTest unit-test suites for `cf_lex`, `cf_parse`, `cf_gen`, and `cf_util`.
 
+[0.3.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shrikant-sagar/cliforge/releases/tag/v0.1.0

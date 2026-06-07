@@ -1,0 +1,105 @@
+# =============================================================================
+# apt-repo.yml — publish a signed APT repository to GitHub Pages on each tag.
+#
+# Triggered alongside release.yml when you push a version tag.  It builds the
+# same .deb (via the shared tools/packaging/build-deb.sh), merges it into the
+# existing repository already published on the gh-pages branch, regenerates and
+# GPG-signs the metadata, and pushes the result back to gh-pages.
+#
+# Users then install with:
+#   curl -fsSL https://<owner>.github.io/<repo>/cliforge-archive-keyring.gpg \
+#     | sudo tee /usr/share/keyrings/cliforge-archive-keyring.gpg > /dev/null
+#   echo "deb [signed-by=/usr/share/keyrings/cliforge-archive-keyring.gpg] \
+#     https://<owner>.github.io/<repo> stable main" \
+#     | sudo tee /etc/apt/sources.list.d/cliforge.list
+#   sudo apt update && sudo apt install cliforge
+#
+# One-time setup required in the repository:
+#   * Secret  APT_GPG_PRIVATE_KEY  — ASCII-armored *private* signing key
+#                                     (a dedicated, passphrase-less key).
+#   * Settings → Pages → Source = "Deploy from a branch", branch = gh-pages /root.
+# =============================================================================
+name: APT Repository
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]*"
+
+permissions:
+  contents: write          # push the gh-pages branch
+
+concurrency:               # never let two tag publishes race on gh-pages
+  group: apt-repo
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & publish apt repo
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout (sources + scripts)
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Parse version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install build + packaging dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build gcc dpkg-dev fakeroot apt-utils gnupg
+
+      - name: Build Release and stage install
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCLIFORGE_BUILD_EXAMPLES=OFF
+          cmake --build build
+          cmake --install build --prefix staging/usr
+
+      - name: Build .deb
+        id: deb
+        run: |
+          DEB=$(bash tools/packaging/build-deb.sh \
+                  "${{ steps.ver.outputs.version }}" staging LICENSE dist)
+          echo "path=$DEB" >> "$GITHUB_OUTPUT"
+
+      - name: Import GPG signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APT_GPG_PRIVATE_KEY" ]; then
+            echo "::error::Secret APT_GPG_PRIVATE_KEY is not set."; exit 1
+          fi
+          echo "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          KEYID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}')
+          echo "APT_GPG_KEY_ID=$KEYID" >> "$GITHUB_ENV"
+
+      - name: Restore existing gh-pages content
+        run: |
+          mkdir -p public
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch --depth=1 origin gh-pages
+            git archive FETCH_HEAD | tar -x -C public
+          fi
+
+      - name: Build / refresh signed apt repo
+        run: |
+          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          bash tools/apt-repo/build-apt-repo.sh \
+            public "${{ steps.deb.outputs.path }}" "$BASE_URL" "$APT_GPG_KEY_ID"
+          touch public/.nojekyll      # serve dirs like /dists/ verbatim
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          keep_files: true
+          commit_message: "apt repo: cliforge ${{ steps.ver.outputs.version }}"

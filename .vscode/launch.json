@@ -1,0 +1,120 @@
+{
+    // ------------------------------------------------------------------------
+    //  cliforge debug + run configurations  (press F5)
+    //
+    //  All configs use the GDB-backed C/C++ debugger (ms-vscode.cpptools),
+    //  which is pre-installed in the dev container.  Each one first runs a
+    //  preLaunchTask that (re)builds the Debug tree in build/, so binaries
+    //  always carry -g symbols and match the source you are looking at.
+    //
+    //  Binaries live where Ninja places them:
+    //    build/cliforge                        ← the generator
+    //    build/tests/unit-tests/ut_cf_*        ← gtest unit-test binaries
+    // ------------------------------------------------------------------------
+    "version": "0.2.0",
+    "configurations": [
+
+        // ── Debug the generator on the canonical example ──────────────────
+        {
+            "name": "Debug cliforge (calctool.cf)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cliforge",
+            // Pass the schema by ABSOLUTE path: cliforge resolves @import
+            // paths relative to the schema file's own directory, so this
+            // works regardless of cwd.  Generated cmdline.{c,h,md} are written
+            // into cwd (build/), keeping the source tree clean.
+            "args": [
+                "${workspaceFolder}/examples/calctool/calctool.cf",
+                "-v"
+            ],
+            "cwd": "${workspaceFolder}/build",
+            "stopAtEntry": false,
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "cliforge: build (Debug + tests)"
+        },
+
+        // ── Debug the generator on whatever .cf is open in the editor ──────
+        {
+            "name": "Debug cliforge (current .cf file)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cliforge",
+            // Absolute path to the open schema; output lands in cwd, which we
+            // set to the file's own directory so generated files appear beside
+            // the schema you are debugging.
+            "args": [
+                "${file}",
+                "-v"
+            ],
+            "cwd": "${fileDirname}",
+            "stopAtEntry": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                { "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ],
+            "preLaunchTask": "cliforge: build (Debug + tests)"
+        },
+
+        // ── Debug a unit-test binary (pick which, optionally filter) ───────
+        // The ${input:} picker lets you choose ut_cf_lex / ut_cf_parse /
+        // ut_cf_gen / ut_cf_util at launch, and optionally a --gtest_filter.
+        {
+            "name": "Debug unit test (pick binary)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tests/unit-tests/${input:utestBinary}",
+            "args": [ "--gtest_filter=${input:gtestFilter}" ],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                { "text": "-enable-pretty-printing", "ignoreFailures": true }
+            ],
+            "preLaunchTask": "cliforge: build (Debug + tests)"
+        },
+
+        // ── Attach to a running process (e.g. a spawned generated binary) ──
+        {
+            "name": "Attach to process (gdb)",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build/cliforge",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "processId": "${command:pickProcess}"
+        }
+    ],
+
+    "inputs": [
+        {
+            "id": "utestBinary",
+            "type": "pickString",
+            "description": "Which unit-test binary to debug?",
+            "options": [
+                "ut_cf_lex",
+                "ut_cf_parse",
+                "ut_cf_gen",
+                "ut_cf_util"
+            ],
+            "default": "ut_cf_parse"
+        },
+        {
+            "id": "gtestFilter",
+            "type": "promptString",
+            "description": "gtest filter (e.g. CfParseMeta.* or *). Use * for all.",
+            "default": "*"
+        }
+    ]
+}

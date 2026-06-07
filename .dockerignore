@@ -1,0 +1,29 @@
+# Keep the Docker build context small and reproducible.
+# Anything regenerated inside the container should not be shipped into it.
+
+# Build trees
+build/
+build-*/
+**/build/
+out/
+
+# Coverage + generated reports
+coverage_report/
+**/*.gcda
+**/*.gcno
+**/*.info
+*_report.md
+
+# Python / virtualenv
+.venv/
+**/__pycache__/
+**/*.pyc
+
+# Node / VSCode extension artefacts
+**/node_modules/
+**/*.vsix
+
+# Editor / OS noise
+.git/
+.DS_Store
+*.swp

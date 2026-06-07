@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
-project(cliforge VERSION 0.2.1 LANGUAGES C)
+project(cliforge VERSION 0.3.0 LANGUAGES C)
+
+# Emit compile_commands.json so editors/IntelliSense (and clang-tidy) resolve
+# includes and macros accurately.  Harmless for non-IDE builds.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------------------------------------------
 # C standard — C99 for the tool itself; generated code targets C89/C99/C11.
