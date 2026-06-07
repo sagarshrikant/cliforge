@@ -1,0 +1,59 @@
+{
+    // ----------------------------------------------------------------------
+    //  cliforge Dev Container definition
+    //
+    //  In VS Code: install the "Dev Containers" extension, then run
+    //  "Dev Containers: Reopen in Container".  VS Code builds the image from
+    //  .devcontainer/Dockerfile and attaches the editor inside it, with the
+    //  C/C++, CMake, and Python extensions pre-installed.
+    //
+    //  The result: every contributor debugs and tests against the exact same
+    //  toolchain as CI, regardless of their host OS.
+    // ----------------------------------------------------------------------
+    "name": "cliforge-dev",
+
+    "build": {
+        // Build context is the repo root (one level up) so the Dockerfile can
+        // COPY tools/utest_agent/requirements.txt.
+        "context": "..",
+        "dockerfile": "Dockerfile"
+    },
+
+    // Land in the bind-mounted source tree.
+    "workspaceFolder": "/workspaces/cliforge",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/cliforge,type=bind,consistency=cached",
+
+    // Attach as the non-root user created in the Dockerfile.
+    "remoteUser": "dev",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-vscode.cmake-tools",
+                "twxs.cmake",
+                "ms-python.python",
+                "streetsidesoftware.code-spell-checker",
+                "vadimcn.vscode-lldb"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": false,
+                "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+                "C_Cpp.default.cStandard": "c99",
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    },
+
+    // Quick smoke check after the container is created: confirm the toolchain
+    // is present.  Non-fatal if anything is missing.
+    "postCreateCommand": "cc --version && cmake --version && gdb --version | head -1 && echo 'cliforge dev container ready'",
+
+    // Useful when contributors want to test the apt/.deb packaging story
+    // (relevant for the 0.4.0 goal) which can need elevated capabilities.
+    "runArgs": [
+        "--cap-add=SYS_PTRACE",
+        "--security-opt", "seccomp=unconfined"
+    ]
+}

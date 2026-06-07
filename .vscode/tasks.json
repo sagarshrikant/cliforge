@@ -1,0 +1,221 @@
+{
+    // VSCode tasks for cliforge development
+    // Run via: Ctrl+Shift+P → Tasks: Run Task
+    "version": "2.0.0",
+    "tasks": [
+
+        // ── UTest Agent: AI-powered test advisor ─────────────────────────────
+        {
+            "label": "utest [Claude]: quick diff analysis",
+            "detail": "Fast: analyse uncommitted src/ changes — Claude API",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm claude",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest [Ollama]: quick diff analysis",
+            "detail": "Fast: analyse uncommitted src/ changes — local Ollama (no API key needed)",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm ollama",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest [Claude]: full pipeline (build + test + coverage + AI)",
+            "detail": "Full: cmake → ctest → lcov → Claude analysis",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm claude --with-build",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest [Ollama]: full pipeline (build + test + coverage + AI)",
+            "detail": "Full: cmake → ctest → lcov → Ollama analysis (offline)",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm ollama --with-build",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest [Claude]: pre-PR check",
+            "detail": "Gate: build+test+coverage+AI, exits 1 if not ready",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm claude --prepr --output utest_prepr_report.md",
+            "group": { "kind": "test", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: re-analyse coverage (no rebuild, Claude)",
+            "detail": "Re-parse last coverage.info → Claude suggestions (no rebuild)",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm claude --coverage-only",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: re-analyse coverage (no rebuild, Ollama)",
+            "detail": "Re-parse last coverage.info → Ollama suggestions (offline)",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm ollama --coverage-only",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: analyse current file (Claude)",
+            "detail": "Analyse the src file currently open in the editor",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm claude --file ${relativeFile}",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: analyse current file (Ollama)",
+            "detail": "Analyse current file — local Ollama (no API key needed)",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --llm ollama --file ${relativeFile}",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: coverage gaps only (no AI)",
+            "detail": "Just show lcov gaps — no LLM call at all",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --coverage-only --no-ai",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: open HTML coverage report",
+            "detail": "Open the last generated lcov HTML report in the browser",
+            "type": "shell",
+            "linux":   { "command": "xdg-open ${workspaceFolder}/coverage_report/html/index.html" },
+            "osx":     { "command": "open ${workspaceFolder}/coverage_report/html/index.html" },
+            "windows": { "command": "start ${workspaceFolder}/coverage_report/html/index.html" },
+            "group": "test",
+            "presentation": { "reveal": "silent", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: list recommended Ollama models",
+            "detail": "Show which Ollama models work best for this agent",
+            "type": "shell",
+            "command": "python ${workspaceFolder}/tools/utest_agent/agent.py --list-models",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: setup Ollama (install + pull model)",
+            "detail": "One-time Ollama setup — installs Ollama and pulls qwen2.5-coder:7b",
+            "type": "shell",
+            "command": "bash ${workspaceFolder}/tools/utest_agent/setup_ollama.sh",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "utest: setup Python dependencies",
+            "detail": "pip install requirements for the UTest Agent",
+            "type": "shell",
+            "command": "pip install -r ${workspaceFolder}/tools/utest_agent/requirements.txt",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+
+        // ── cliforge: DEBUG build (debuggable binaries + tests) ───────────────
+        // The "build/" tree is the canonical dev build used by the F5 debugger
+        // and by ctest.  Debug type → -g, no optimisation, assertions on.
+        {
+            "label": "cliforge: configure (Debug + tests)",
+            "detail": "Configure build/ as Debug with the gtest suite enabled",
+            "type": "shell",
+            "command": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIFORGE_BUILD_TESTS=ON",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "cliforge: build (Debug + tests)",
+            "detail": "Configure (if needed) then build build/ — the default build",
+            "type": "shell",
+            "command": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIFORGE_BUILD_TESTS=ON && cmake --build build",
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+
+        // ── cliforge: RELEASE build (optimised, no tests) ─────────────────────
+        // Separate "build-release/" tree so Debug and Release artefacts never
+        // clobber each other.  This is what packaging/install consume.
+        {
+            "label": "cliforge: configure (Release)",
+            "detail": "Configure build-release/ as an optimised Release build",
+            "type": "shell",
+            "command": "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "cliforge: build (Release)",
+            "detail": "Configure (if needed) then build the optimised Release binary",
+            "type": "shell",
+            "command": "cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr && cmake --build build-release",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+
+        // ── cliforge: coverage build (Debug + --coverage for lcov) ────────────
+        {
+            "label": "cliforge: configure (Debug + coverage)",
+            "detail": "Configure build/ with Debug + coverage instrumentation for lcov",
+            "type": "shell",
+            "command": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIFORGE_BUILD_TESTS=ON -DCLIFORGE_COVERAGE=ON",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+
+        // ── cliforge: test execution ──────────────────────────────────────────
+        {
+            "label": "cliforge: run all tests",
+            "detail": "Build then run the full ctest suite (unit + system)",
+            "type": "shell",
+            "command": "cmake --build build && ctest --test-dir build --output-on-failure",
+            "group": { "kind": "test", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "cliforge: run unit tests only",
+            "detail": "ctest -L unit in build/",
+            "type": "shell",
+            "command": "ctest --test-dir build -L unit --output-on-failure",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "cliforge: run system tests only",
+            "detail": "ctest -L system in build/",
+            "type": "shell",
+            "command": "ctest --test-dir build -L system --output-on-failure",
+            "group": "test",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        }
+    ]
+}

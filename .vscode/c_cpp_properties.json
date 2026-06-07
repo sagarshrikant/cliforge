@@ -1,0 +1,21 @@
+{
+    // C/C++ IntelliSense for the cliforge sources.  The compile_commands.json
+    // produced by the CMake build (Ninja exports it automatically) drives
+    // accurate include/macro resolution; the fields below are the fallback.
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Linux",
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c99",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build"
+            ],
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+        }
+    ]
+}

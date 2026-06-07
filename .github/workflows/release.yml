@@ -82,6 +82,9 @@ jobs:
           # Binary
           cp staging/usr/bin/cliforge pkg/usr/bin/
 
+          # SDK headers (e.g. cliforge/cf_argv_slice.h) — required by consumers
+          [ -d staging/usr/include ] && cp -a staging/usr/include pkg/usr/ || true
+
           # Man page (if present)
           [ -f staging/usr/share/man/man1/cliforge.1.gz ] && \
             cp staging/usr/share/man/man1/cliforge.1.gz pkg/usr/share/man/man1/ || true

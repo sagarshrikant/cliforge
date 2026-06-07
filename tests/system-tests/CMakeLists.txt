@@ -77,6 +77,18 @@ foreach(SCHEMA bad_no_meta bad_unknown_type bad_dup_option bad_import_missing)
 endforeach()
 
 # ---------------------------------------------------------------------------
+# st_output_dir — -o / --output respected in every argument ordering
+# ---------------------------------------------------------------------------
+
+add_system_test(st_output_dir_ordering
+    COMMAND ${CMAKE_COMMAND}
+        -DCLIFORGE_BIN=${CLIFORGE_BINARY}
+        -DSCHEMA_FILE=${FIXTURE_DIR}/minimal.cf
+        -DOUT_DIR=${ST_OUTPUT_DIR}/st_output_dir
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/st_output_dir/run_output_dir.cmake
+)
+
+# ---------------------------------------------------------------------------
 # st_generated_code — compile generated cmdline.c under C89 / C99 / C11
 # ---------------------------------------------------------------------------
 

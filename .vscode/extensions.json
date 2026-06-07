@@ -1,0 +1,14 @@
+{
+    // Extensions VSCode will recommend when this folder is opened.  These are
+    // the same ones the dev container installs automatically, so host-based
+    // and container-based contributors get a consistent toolset.
+    "recommendations": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "ms-python.python",
+        "streetsidesoftware.code-spell-checker",
+        "ms-vscode-remote.remote-containers"
+    ]
+}

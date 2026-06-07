@@ -8,29 +8,155 @@ setup, coding standards, test requirements, and pull-request process.
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Building from source](#building-from-source)
-3. [Running the test suite](#running-the-test-suite)
-4. [Coverage report](#coverage-report)
-5. [AI test advisor](#ai-test-advisor)
-6. [Coding standards](#coding-standards)
-7. [Test policy](#test-policy)
-8. [Pull request checklist](#pull-request-checklist)
-9. [Project layout](#project-layout)
+2. [Developing in a container](#developing-in-a-container)
+3. [Building from source](#building-from-source)
+4. [Running the test suite](#running-the-test-suite)
+5. [Coverage report](#coverage-report)
+6. [AI test advisor](#ai-test-advisor)
+7. [Coding standards](#coding-standards)
+8. [Test policy](#test-policy)
+9. [Pull request checklist](#pull-request-checklist)
+10. [Project layout](#project-layout)
 
 ---
 
 ## Prerequisites
 
-| Tool | Minimum version | Notes |
-|------|----------------|-------|
-| CMake | 3.16 | Required |
-| GCC or Clang | GCC 7 / Clang 6 | C and C++ compiler |
-| g++ / clang++ | Same | Required only for building tests |
-| lcov + genhtml | 1.14 | Coverage report only |
-| Python 3 | 3.9 | AI test advisor only |
+cliforge has **zero runtime dependencies** and needs no external C libraries.
+The tools below are purely the build / test / docs / packaging toolchain. If you
+would rather not install anything on your host, skip straight to
+[Developing in a container](#developing-in-a-container) — the dev container
+ships everything below pre-installed.
+
+### Required (build + test)
+
+| Tool | Minimum | Purpose |
+|------|---------|---------|
+| CMake | 3.16 | Build system |
+| Ninja | 1.10 | Default generator used by the VSCode tasks and CI |
+| GCC **or** Clang | GCC 7 / Clang 6 | C compiler for cliforge and the generated code |
+| g++ / clang++ | same | C++ compiler — only needed to build the GTest suite |
+| GDB | 10 | Step-debugging via the F5 launch configs |
 | Git | any | |
 
-No external C libraries are required. cliforge has zero runtime dependencies.
+### Optional (only for specific tasks)
+
+| Tool | Needed for |
+|------|-----------|
+| lcov + genhtml | Coverage HTML report (`-DCLIFORGE_COVERAGE=ON`) |
+| valgrind | Memory checking |
+| Python 3 (≥ 3.9) + pip | AI test advisor (`tools/utest_agent/`) |
+| doxygen + graphviz | API reference extraction (+ diagrams) |
+| Sphinx + Breathe + Furo (pip) | Reference-guide documentation site |
+| dpkg-dev + fakeroot | Building / testing the `.deb` package |
+| rpm | Building / testing the `.rpm` package |
+
+### One-line install (Debian / Ubuntu / WSL)
+
+This installs everything required **plus** the common optional tools — i.e. the
+same set the dev container bundles, so a native host reaches parity with CI:
+
+```sh
+sudo apt update && sudo apt install -y \
+    build-essential gcc g++ clang \
+    cmake ninja-build gdb lcov valgrind \
+    python3 python3-pip python3-venv \
+    doxygen graphviz \
+    dpkg-dev fakeroot rpm zstd \
+    git curl
+
+# Python docs toolchain + AI-advisor dependencies
+pip3 install --break-system-packages sphinx breathe furo sphinx-copybutton myst-parser
+pip3 install --break-system-packages -r tools/utest_agent/requirements.txt
+```
+
+> **Fedora / RHEL:** the package names differ slightly (`gcc-c++`, `ninja-build`,
+> `dpkg`, `rpm-build`); install the equivalents of the list above.
+
+The exact, authoritative list always lives in
+[`.devcontainer/Dockerfile`](.devcontainer/Dockerfile) — if the two ever drift,
+the Dockerfile wins.
+
+---
+
+## Developing in a container
+
+The repository ships a ready-to-use development container under
+`.devcontainer/`. It is built on **Ubuntu 22.04 — the same base as our CI
+runners** — so a green build inside the container means a green build in CI.
+Think of it as a CI runner you can open a shell inside.
+
+The image bundles the full toolchain (`gcc`, `clang-14`, `cmake`, `ninja`,
+`gdb`, `lcov`, `valgrind`), the documentation toolchain (`doxygen`, `graphviz`,
+Sphinx + Breathe + Furo), the AI test advisor's Python dependencies, the Ollama
+binary (offline advisor backend), and packaging tools (`dpkg-dev`, `fakeroot`,
+`rpm`) for testing `.deb`/`.rpm` builds locally.
+
+### Option A — VSCode Dev Containers (recommended)
+
+1. Install the **Dev Containers** extension (`ms-vscode-remote.remote-containers`).
+2. Open the cliforge folder, then run **"Dev Containers: Reopen in Container"**
+   from the command palette (`Ctrl+Shift+P`).
+3. VSCode builds the image, mounts the repo at `/workspaces/cliforge`, and
+   installs the C/C++, CMake, and Python extensions automatically.
+4. Press **F5** to build and debug (see the launch configs below), or run any
+   task from **Terminal → Run Task**.
+
+### Option B — plain Docker
+
+```sh
+# Build the image (run from the repo root)
+docker build -t cliforge-dev -f .devcontainer/Dockerfile .
+
+# Open a shell with the repo bind-mounted; --cap-add=SYS_PTRACE enables gdb
+docker run --rm -it \
+    --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+    -v "$PWD":/workspaces/cliforge -w /workspaces/cliforge \
+    cliforge-dev
+
+# Inside the container, the normal build/test flow just works:
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIFORGE_BUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### Ollama (offline AI advisor)
+
+To keep the image small, only the Ollama **binary** is baked in — the ~5 GB
+model is not. Pull it once, inside the running container:
+
+```sh
+bash tools/utest_agent/setup_ollama.sh     # installs the service + pulls the model
+```
+
+The Claude backend needs no download — just `export ANTHROPIC_API_KEY=...`.
+
+### IDE build, test, and debug (VSCode)
+
+The `.vscode/` configs work both inside the container and on a host that has
+the toolchain installed.
+
+**Tasks** (`Ctrl+Shift+P → Tasks: Run Task`):
+
+| Task | What it does |
+|------|--------------|
+| `cliforge: build (Debug + tests)` | Default build (`Ctrl+Shift+B`) → `build/`, debuggable, tests on |
+| `cliforge: build (Release)` | Optimised build → `build-release/` |
+| `cliforge: configure (Debug + coverage)` | Adds gcov/lcov instrumentation to `build/` |
+| `cliforge: run all tests` | Builds, then runs the full ctest suite |
+| `cliforge: run unit tests only` / `… system tests only` | Labelled ctest subsets |
+
+**Debug** (press **F5**, configurations in `.vscode/launch.json`):
+
+| Configuration | Use |
+|---------------|-----|
+| `Debug cliforge (calctool.cf)` | Step through the generator on the canonical example |
+| `Debug cliforge (current .cf file)` | Run the generator on whatever `.cf` is open in the editor |
+| `Debug unit test (pick binary)` | Pick `ut_cf_lex`/`ut_cf_parse`/`ut_cf_gen`/`ut_cf_util`, optionally a `--gtest_filter` |
+| `Attach to process (gdb)` | Attach GDB to an already-running binary |
+
+Each debug config first runs the Debug build task, so the binary you step
+through always matches your latest source.
 
 ---
 
@@ -278,6 +404,14 @@ Before opening a PR, confirm:
 
 ```
 cliforge/
+├── .devcontainer/
+│   ├── Dockerfile          # Ubuntu 22.04 dev image (mirrors CI + dev tools)
+│   └── devcontainer.json   # VSCode "Reopen in Container" definition
+├── .vscode/
+│   ├── tasks.json          # Build / test / coverage / utest_agent tasks
+│   ├── launch.json         # F5 GDB debug configs (generator + unit tests)
+│   ├── c_cpp_properties.json # IntelliSense (compile_commands.json driven)
+│   └── settings.json       # Editor + cSpell settings for .cf files
 ├── src/
 │   ├── cf_lex.c/h        # Schema lexer
 │   ├── cf_parse.c/h      # Recursive-descent parser → AST

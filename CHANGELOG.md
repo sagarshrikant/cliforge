@@ -7,6 +7,60 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] — 2026-05-29
+
+### Added
+
+- **Reproducible dev container** (`.devcontainer/`): An Ubuntu 22.04 image that
+  mirrors the CI runners (gcc + clang-14) and adds everything a contributor
+  needs locally — `cmake`, `ninja`, `gdb`, `lcov`, `valgrind`, the docs
+  toolchain (`doxygen`, `graphviz`, Sphinx + Breathe + Furo), the AI test
+  advisor's Python dependencies, Ollama (binary only; pull the model on first
+  use), and packaging tools (`dpkg-dev`, `fakeroot`, `rpm`). Contributors can
+  `docker build` it directly or use VSCode "Reopen in Container".
+
+- **`.devcontainer/devcontainer.json`**: VSCode Dev Containers definition that
+  builds the image, attaches as a non-root `dev` user, installs the C/C++,
+  CMake, and Python extensions, and enables `ptrace` so GDB works in-container.
+
+- **`.dockerignore`**: Keeps build trees, coverage output, virtualenvs, and
+  node/VSIX artefacts out of the Docker build context.
+
+- **`.vscode/launch.json`**: GDB-backed F5 debug configurations — debug the
+  generator on `calctool.cf` or on the currently open `.cf` file, debug any
+  unit-test binary via a picker (with an optional `--gtest_filter`), and an
+  attach-to-process config.
+
+- **`.vscode/c_cpp_properties.json`**: IntelliSense configuration driven by the
+  generated `compile_commands.json`.
+
+### Fixed
+
+- **`-o`/`--output` was ignored when it followed the schema argument.** The CLI
+  parsed argv in a single pass and generated each file the moment it was seen,
+  using whatever output directory had been set *so far* — so `schema.cf -o out`
+  silently wrote to the current directory while `-o out schema.cf` worked.
+  `main.c` now parses all options first and generates afterwards, so option
+  order no longer matters. A missing `-o` argument and a non-writable target
+  directory now produce clear errors and a non-zero exit. Added the
+  `st_output_dir_ordering` system test covering all three argument orderings
+  (`-o` before, `-o` after, and `--output=` joined form) with a leak check.
+
+### Changed
+
+- **`.vscode/tasks.json`**: Reworked build/test tasks into clear Debug (`build/`)
+  and Release (`build-release/`) trees, plus a coverage-instrumented configure
+  and dedicated unit-/system-/all-test runners. The existing utest_agent tasks
+  are unchanged.
+
+- **`CMakeLists.txt`**: Bumped project version to 0.3.0 and enabled
+  `CMAKE_EXPORT_COMPILE_COMMANDS` so editors resolve includes/macros accurately.
+
+- **`CONTRIBUTING.md`**: Added a "Developing in a container" section covering
+  the Docker and VSCode Dev Containers workflows and the F5 debug/test loop.
+
+---
+
 ## [0.2.0] — 2026-05-27
 
 ### Added
@@ -92,5 +146,6 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CMake build system with `CLIFORGE_BUILD_TESTS` and `CLIFORGE_COVERAGE` options.
 - GTest unit-test suites for `cf_lex`, `cf_parse`, `cf_gen`, and `cf_util`.
 
+[0.3.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shrikant-sagar/cliforge/releases/tag/v0.1.0

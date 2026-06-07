@@ -1,0 +1,194 @@
+{
+    /* ------------------------------------------------------------------ *
+     *  VS Code workspace settings for the cliforge project.              *
+     * ------------------------------------------------------------------ */
+
+    /* ── Spell checker (Code Spell Checker / cSpell) ─────────────────── */
+
+    /* Disable spell checking for .cf schema files entirely.
+     * cliforge schemas are a structured DSL — identifiers like
+     * eval-mode, plugin-spec, sint8, ifkey are valid language tokens,
+     * not prose words that need spell-checking.                          */
+    "cSpell.ignorePaths": [
+        "**/*.cf",
+        "**/out/**",
+        "**/node_modules/**",
+        "**/*.vsix"
+    ],
+
+    /* Project-specific words to add to the cSpell dictionary.
+     * These appear in source files, comments, docs, and markdown.        */
+    "cSpell.words": [
+        /* Project names */
+        "cliforge",
+        "calctool",
+        "netmon",
+        "libnet",
+        "libm",
+        "cmplib",
+        "arithlib",
+        "gengetopt",
+        "cmdline",
+
+        /* cliforge schema keyword fragments */
+        "ifkey",
+        "ifnkey",
+        "ifdef",
+        "ifndef",
+        "subcommand",
+        "positional",
+        "sint8",
+        "sint16",
+        "sint32",
+        "sint64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "multiline",
+        "dlopen",
+
+        /* Documentation / toolchain */
+        "doxygen",
+        "doxyfile",
+        "breathe",
+        "sphinx",
+        "cmake",
+        "cmakefile",
+        "cpack",
+        "vsix",
+        "vsce",
+        "tmLanguage",
+        "apidoc",
+        "autoconf",
+        "debhelper",
+        "dpkg",
+        "pkgconfig",
+        "manpage",
+        "manpages",
+
+        /* Networking / embedded / automotive domain terms */
+        "arith",
+        "trig",
+        "bpf",
+        "arp",
+        "gpio",
+        "rtos",
+        "misra",
+        "autosar",
+        "adas",
+        "canfd",
+        "iface",
+        "timestamping",
+        "syscall",
+        "sigint",
+        "sigterm",
+        "epoll",
+        "inotify",
+        "syslog",
+        "sysfs",
+        "netlink",
+        "sockopt",
+        "sockaddr",
+        "getopt",
+        "nanosecond",
+        "nanoseconds",
+        "millisecond",
+        "milliseconds",
+        "microsecond",
+        "microseconds",
+        "kilobytes",
+        "megabytes",
+        "gigabytes",
+        "kibibytes",
+        "mebibytes",
+        "gibibytes",
+
+        /* C / LSP / extension internals */
+        "codegen",
+        "typedef",
+        "preprocessor",
+        "lsp",
+        "jsonrpc",
+        "textmate",
+        "tokenizer",
+        "tokenize",
+        "tokenizes",
+        "lexer",
+        "lexing",
+        "trivia",
+        "diagnostics",
+        "languageserver",
+        "languageclient",
+        "completionitem",
+        "hoverprovider",
+        "symbolkind",
+        "textdocument",
+        "vscode",
+        "tsconfig",
+        "esbuild",
+        "commonjs",
+        "semver",
+
+        /* Misc technical terms that appear in comments/docs */
+        "verbosity",
+        "idempotent",
+        "idempotency",
+        "readonly",
+        "namespaced",
+        "hardcoded",
+        "hardcode",
+        "backpressure",
+        "checksum",
+        "checksums",
+        "coalesce",
+        "prefixed",
+        "suffixed",
+        "variadic",
+        "argc",
+        "argv",
+        "nullptr",
+        "stdint",
+        "stdio",
+        "getenv",
+        "snprintf",
+        "strtoul",
+        "strncmp",
+        "strcpy",
+        "strdup",
+        "malloc",
+        "calloc",
+        "realloc"
+    ],
+
+    /* ── File associations ───────────────────────────────────────────── */
+
+    "files.associations": {
+        "*.cf": "cliforge"
+    },
+
+    /* ── Editor tweaks for .cf files ────────────────────────────────── */
+
+    "[cliforge]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.rulers": [100],
+        "editor.wordWrap": "off",
+        "editor.formatOnSave": false
+    },
+
+    /* ── Search exclusions ───────────────────────────────────────────── */
+
+    "search.exclude": {
+        "**/out/**": true,
+        "**/node_modules/**": true,
+        "**/*.vsix": true
+    },
+
+    /* ── File watcher exclusions ─────────────────────────────────────── */
+
+    "files.watcherExclude": {
+        "**/out/**": true,
+        "**/node_modules/**": true
+    }
+}

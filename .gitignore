@@ -34,8 +34,23 @@ tools/vscode-schema-ext/*.vsix
 # ----------------------------------------------------------------------------
 # Editor / IDE
 # ----------------------------------------------------------------------------
-.vscode/
+# Nested .vscode dirs inside sub-projects (e.g. the extension tooling) are
+# personal/editor-local — never track them.
+tools/**/.vscode/
+
+# Root .vscode: ignore personal/editor-local state, but DO share the project's
+# checked-in dev configs (tasks, launch, IntelliSense, settings, recommended
+# extensions) so every contributor gets the same build/test/debug experience.
+/.vscode/*
+!/.vscode/tasks.json
+!/.vscode/launch.json
+!/.vscode/settings.json
+!/.vscode/c_cpp_properties.json
+!/.vscode/extensions.json
 .idea/
+
+# clangd / CMake local index cache
+.cache/
 *.swp
 *.swo
 *~
@@ -60,7 +75,7 @@ desktop.ini
 # UTest Agent generated output
 # ----------------------------------------------------------------------------
 coverage_report/
-utest_prepr_report.md
+utest_*report*.md
 *.gcda
 *.gcno
 
