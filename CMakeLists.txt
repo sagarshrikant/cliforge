@@ -59,6 +59,16 @@ set(CLIFORGE_SOURCES
 add_executable(cliforge ${CLIFORGE_SOURCES})
 target_include_directories(cliforge PRIVATE src)
 
+# When building for coverage the binary itself must also carry instrumentation
+# so that system tests (which invoke the cliforge binary directly) produce
+# .gcda files alongside the unit-test .gcda files.
+if(CLIFORGE_COVERAGE)
+    target_compile_options(cliforge PRIVATE
+        -O0 -g --coverage -fprofile-arcs -ftest-coverage
+    )
+    target_link_options(cliforge PRIVATE --coverage)
+endif()
+
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
@@ -82,6 +92,7 @@ set(CLIFORGE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include"
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cliforge_version.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/cliforge_version.h"
+    @ONLY
 )
 target_include_directories(cliforge PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
