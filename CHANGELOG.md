@@ -7,9 +7,19 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.3.0] — 2026-05-29
+## [0.3.0] — 2026-06-07
 
 ### Added
+
+- **Signed APT repository on GitHub Pages** for `sudo apt install cliforge`.
+  A new `apt-repo.yml` workflow runs on each version tag: it builds the `.deb`,
+  merges it into the repo already published on the `gh-pages` branch, and
+  regenerates + GPG-signs the metadata (`apt-ftparchive` + `gpg`), so older
+  versions stay installable and `apt upgrade` picks up new ones. Packaging logic
+  is now centralised in `tools/packaging/build-deb.sh` (shared by `release.yml`
+  and `apt-repo.yml`); the repository assembler lives in
+  `tools/apt-repo/build-apt-repo.sh`. The `.deb` remains attached to each GitHub
+  Release as well, for direct `sudo apt install ./cliforge_*.deb` use.
 
 - **Reproducible dev container** (`.devcontainer/`): An Ubuntu 22.04 image that
   mirrors the CI runners (gcc + clang-14) and adds everything a contributor

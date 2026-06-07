@@ -400,6 +400,65 @@ Before opening a PR, confirm:
 
 ---
 
+## Releasing & packaging
+
+Releases are tag-driven. Pushing a `v*` tag fires two workflows:
+
+- **`release.yml`** — builds the `.deb` + `.tar.gz` and creates the GitHub
+  Release with both attached.
+- **`apt-repo.yml`** — builds the `.deb`, merges it into the signed APT
+  repository on the `gh-pages` branch, regenerates + GPG-signs the metadata,
+  and publishes it so users can `sudo apt install cliforge`.
+
+Both build the package through the single shared script
+`tools/packaging/build-deb.sh`, so the two can never drift. The repository
+assembler is `tools/apt-repo/build-apt-repo.sh` (pure `apt-ftparchive` + `gpg`,
+no database — the whole repo is static files on `gh-pages`).
+
+### One-time setup (maintainers)
+
+The apt repo needs a signing key and Pages enabled:
+
+1. Generate a dedicated, passphrase-less signing key:
+
+   ```sh
+   gpg --batch --gen-key <<EOF
+   %no-protection
+   Key-Type: RSA
+   Key-Length: 4096
+   Name-Real: cliforge apt signing
+   Name-Email: shrikant.sagar@gmail.com
+   Expire-Date: 0
+   %commit
+   EOF
+   ```
+
+2. Export the private key and store it as the repository secret
+   **`APT_GPG_PRIVATE_KEY`** (Settings → Secrets and variables → Actions):
+
+   ```sh
+   gpg --armor --export-secret-keys cliforge apt signing
+   ```
+
+   (It is passphrase-less by design; the GitHub secret store is the protection.)
+
+3. Settings → **Pages** → Source = "Deploy from a branch", branch = `gh-pages`,
+   folder = `/ (root)`.
+
+After that, every `git push --tags` refreshes the live apt repo automatically.
+
+### Building the .deb locally
+
+```sh
+cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release -DCLIFORGE_BUILD_EXAMPLES=OFF
+cmake --build build-rel
+cmake --install build-rel --prefix staging/usr
+bash tools/packaging/build-deb.sh 0.3.0 staging LICENSE dist
+# → dist/cliforge_0.3.0_amd64.deb
+```
+
+---
+
 ## Project layout
 
 ```
@@ -441,9 +500,12 @@ cliforge/
 │   └── workflows/
 │       ├── ci.yml        # Build + test matrix (gcc C99/C11, clang-14 C11)
 │       ├── coverage.yml  # lcov report on every push to main
-│       └── release.yml   # .deb + .tar.gz on version tag push
+│       ├── release.yml   # .deb + .tar.gz on version tag push
+│       └── apt-repo.yml  # signed apt repo → gh-pages on version tag push
 └── tools/
-    ├── utest_agent/           # AI-powered unit test advisor (Claude + Ollama)
-    ├── vscode-schema-ext/     # VSCode LSP extension for .cf schema files
+    ├── packaging/            # build-deb.sh — shared .deb builder
+    ├── apt-repo/             # build-apt-repo.sh — signed apt repo assembler
+    ├── utest_agent/          # AI-powered unit test advisor (Claude + Ollama)
+    ├── vscode-schema-ext/    # VSCode LSP extension for .cf schema files
     └── vscode-utest-extension/ # VSCode UI wrapper for utest_agent
 ```

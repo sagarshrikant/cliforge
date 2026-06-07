@@ -66,8 +66,31 @@ Key capabilities beyond traditional parser generators:
 
 ### 1 — Install
 
+**Via apt (recommended):**
+
 ```sh
-# From source (requires cmake >= 3.16, gcc or clang)
+# One time: add the signing key and repository
+curl -fsSL https://shrikant-sagar.github.io/cliforge/cliforge-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/cliforge-archive-keyring.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/cliforge-archive-keyring.gpg] https://shrikant-sagar.github.io/cliforge stable main" \
+  | sudo tee /etc/apt/sources.list.d/cliforge.list
+
+sudo apt update && sudo apt install cliforge   # → /usr/bin/cliforge
+```
+
+Updates then arrive through the usual `sudo apt update && sudo apt upgrade`.
+
+**Direct `.deb` (any Debian/Ubuntu, no repo needed):** grab the package from the
+[latest release](https://github.com/shrikant-sagar/cliforge/releases/latest) and:
+
+```sh
+sudo apt install ./cliforge_*_amd64.deb
+```
+
+**From source:**
+
+```sh
+# requires cmake >= 3.16, gcc or clang
 git clone https://github.com/shrikant-sagar/cliforge.git
 cd cliforge
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -75,7 +98,9 @@ cmake --build build -j$(nproc)
 sudo cmake --install build          # installs to /usr/local/bin/cliforge
 ```
 
-Package manager installation (planned): `sudo apt install cliforge`
+> Don't mix install methods: a source install lands in `/usr/local/bin` and will
+> shadow an apt-installed `/usr/bin/cliforge` on `PATH`. Pick one, or remove the
+> other (`sudo rm /usr/local/bin/cliforge`).
 
 ### 2 — Write a schema
 
@@ -251,7 +276,7 @@ cliforge/
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 
-# Build + run all 87 tests
+# Build + run all 88 tests
 cmake -S . -B build-tests -DCLIFORGE_BUILD_TESTS=ON
 cmake --build build-tests -j$(nproc)
 ctest --test-dir build-tests --output-on-failure

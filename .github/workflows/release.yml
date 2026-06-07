@@ -71,44 +71,10 @@ jobs:
 
       - name: Build .deb package
         run: |
-          VERSION=${{ steps.ver.outputs.version }}
-          DEB="cliforge_${VERSION}_amd64.deb"
-
-          mkdir -p pkg/DEBIAN
-          mkdir -p pkg/usr/bin
-          mkdir -p pkg/usr/share/man/man1
-          mkdir -p pkg/usr/share/doc/cliforge
-
-          # Binary
-          cp staging/usr/bin/cliforge pkg/usr/bin/
-
-          # SDK headers (e.g. cliforge/cf_argv_slice.h) — required by consumers
-          [ -d staging/usr/include ] && cp -a staging/usr/include pkg/usr/ || true
-
-          # Man page (if present)
-          [ -f staging/usr/share/man/man1/cliforge.1.gz ] && \
-            cp staging/usr/share/man/man1/cliforge.1.gz pkg/usr/share/man/man1/ || true
-
-          # Copyright
-          cp LICENSE pkg/usr/share/doc/cliforge/copyright
-
-          # control file
-          cat > pkg/DEBIAN/control << CTRL
-          Package: cliforge
-          Version: ${VERSION}
-          Section: devel
-          Priority: optional
-          Architecture: amd64
-          Depends: libc6 (>= 2.17)
-          Maintainer: Shrikant Sagar <shrikant.sagar@gmail.com>
-          Description: CLI parser-generator for C89/C99/C11 projects
-           cliforge generates cmdline.c, cmdline.h, and cmdline.md from
-           declarative .cf schema files. Designed for embedded and systems
-           software with MISRA-C compatible output and static storage only.
-          CTRL
-
-          fakeroot dpkg-deb --build pkg "$DEB"
-          echo "deb_file=$DEB" >> $GITHUB_ENV
+          # Single source of truth for packaging — shared with apt-repo.yml.
+          DEB=$(bash tools/packaging/build-deb.sh \
+                  "${{ steps.ver.outputs.version }}" staging LICENSE .)
+          echo "deb_file=$(basename "$DEB")" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
