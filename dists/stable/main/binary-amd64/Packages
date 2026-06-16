@@ -18,3 +18,23 @@ Description: CLI parser-generator for C89/C99/C11 projects
  declarative .cf schema files. Designed for embedded and systems
  software with MISRA-C compatible output and static storage only.
 
+Package: cliforge
+Architecture: amd64
+Version: 0.4.0
+Priority: optional
+Section: devel
+Maintainer: Shrikant Sagar <shrikant.sagar@gmail.com>
+Installed-Size: 200
+Depends: libc6 (>= 2.17)
+Filename: pool/main/c/cliforge/cliforge_0.4.0_amd64.deb
+Size: 62302
+MD5sum: 6969d073ee066701f9c1c40e2a0da61f
+SHA1: 6ce6b28bff5497180be13491ebbb3ce185e2b6b2
+SHA256: cebb1c9abdd8db4ffc6cfd10ca24d21eec780840bd5ad85f7fbe7bcfdd7fb309
+SHA512: 43dccb62284995c0e18f334e96ade1c9e593895f84aa4234f5161097382c092a9f09a2f90c52095e26624eefc1f840a6de2a6e655799e7f32f6a85300e9f5687
+Homepage: https://github.com/shrikant-sagar/cliforge
+Description: CLI parser-generator for C89/C99/C11 projects
+ cliforge generates cmdline.c, cmdline.h, and cmdline.md from
+ declarative .cf schema files. Designed for embedded and systems
+ software with MISRA-C compatible output and static storage only.
+
