@@ -2,6 +2,23 @@
 
 All notable changes to the **cliforge** VS Code extension will be documented in this file.
 
+## [0.3.0] - 2026-06-16
+
+### Added
+- Support for **`@schema cliforge v2`** schemas (no longer flagged as an unknown
+  version).
+- Recognise the v2 qualifiers **`on-error`** (option + `meta` default) and
+  **`units [ … ]`** on quantity types: syntax highlighting, completion, hover
+  docs, and no more "unknown qualifier" errors.
+- The type-expression parser now accepts `units [ a, b, c ]` after a quantity
+  type, so v2 schemas parse without spurious diagnostics.
+
+### Fixed
+- The "quantity needs a display hint" warning is suppressed when the type
+  already restricts its units via `units [ … ]`.
+- Guarded a crash in the unit-hint validation when a quantity type had no
+  parenthesised unit argument.
+
 ## [0.2.1] - 2026-05-27
 
 ### Fixed

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cliforge VERSION 0.3.0 LANGUAGES C)
+project(cliforge VERSION 0.4.0 LANGUAGES C)
 
 # Emit compile_commands.json so editors/IntelliSense (and clang-tidy) resolve
 # includes and macros accurately.  Harmless for non-IDE builds.

@@ -110,6 +110,11 @@ typedef struct cf_type_expr {
     int             has_range;
     char            range_lo[CF_MAX_IDENT_LEN];
     char            range_hi[CF_MAX_IDENT_LEN];
+
+    /* v2 `units [..]` — accepted unit suffixes for a quantity type.
+     * nunits == 0 means "all units of the group are accepted". */
+    char            units[CF_MAX_MEMBERS][8];
+    unsigned int    nunits;
 } cf_type_expr_t;
 
 /* -------------------------------------------------------------------------
@@ -125,6 +130,12 @@ typedef struct cf_named_type {
 /* -------------------------------------------------------------------------
  * Option / positional qualifiers
  * ---------------------------------------------------------------------- */
+
+typedef enum cf_on_error {
+    CF_ONERR_DEFAULT = 0,  /* unset: inherit meta default, else exit */
+    CF_ONERR_EXIT    = 1,  /* bad value: report and fail the parse    */
+    CF_ONERR_WARN    = 2   /* bad value: warn, keep default, continue */
+} cf_on_error_t;
 
 typedef enum cf_required {
     CF_REQ_OPTIONAL  = 0,
@@ -164,6 +175,7 @@ typedef struct cf_option {
     char           deprecated[CF_MAX_STRING_LEN];
     int            is_deprecated;
     char           display_unit[CF_MAX_IDENT_LEN];
+    cf_on_error_t  on_error;      /* validation failure policy (v2) */
     /* documentation */
     char           help[CF_MAX_STRING_LEN];
     char           details[CF_MAX_STRING_LEN];
@@ -275,6 +287,7 @@ typedef struct cf_meta {
     char  doc_title[CF_MAX_STRING_LEN];
     char  description[CF_MAX_STRING_LEN];
     char  i18n[CF_MAX_STRING_LEN];
+    cf_on_error_t on_error;   /* project-wide default validation policy */
     int   present;
 } cf_meta_t;
 

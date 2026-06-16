@@ -1530,3 +1530,75 @@ Each directory contains a `README.md` with build instructions and feature covera
 ---
 
 *End of cliforge schema specification v1 draft 0.3*
+
+---
+
+## 27. Schema v2 additions (0.4.0)
+
+These features require `@schema cliforge v2`. A `v1` schema is unaffected: its
+generated output is byte-for-byte identical to 0.3.x.
+
+### 27.1 Unit-aware quantity storage and helpers
+
+In v2, `duration`, `bytes`, and `frequency` types generate a typed record and a
+base-unit conversion helper (per `<prefix>`):
+
+```c
+enum cc_duration_unit { CC_DURATION_NS, CC_DURATION_US, CC_DURATION_MS,
+                        CC_DURATION_S, CC_DURATION_M, CC_DURATION_H, CC_DURATION_D };
+struct cc_duration { uint64_t value; enum cc_duration_unit unit; };
+uint64_t cc_duration_to_ns(const struct cc_duration *q);     /* bytes -> _to_bytes, frequency -> _to_hz */
+```
+
+The unit suffix is parsed and preserved (no parse-time conversion); the
+application converts on demand. `ratio` remains a scalar for now. (In v1 these
+types generate a plain `uint64_t` and the suffix is dropped.)
+
+### 27.2 `units [ … ]` — restrict and document accepted units
+
+```
+period : duration units [us, ms, s] = 10ms
+```
+
+The listed suffixes are the only accepted units (others are rejected per the
+`on-error` policy), `--help` shows `(units: us|ms|s)`, and a `default` whose
+unit is not in the list is rejected at generate time.
+
+### 27.3 `on-error = exit | warn`
+
+A per-option validation-failure policy; `meta { on-error = … }` sets the
+project default; the built-in default is `exit`.
+
+```
+meta { on-error = exit }
+option precision { type = uint8 in 0..16  on-error = warn }
+```
+
+`exit` makes the parse report the error and return non-zero. `warn` reports a
+warning, keeps the option's default (or clamps a numeric to the nearest bound),
+and continues. Generated code never calls `exit()` itself — the caller decides.
+
+### 27.4 Range enforcement
+
+`in lo..hi` and `max =` on integer options now emit runtime checks that apply
+the `on-error` policy:
+
+```
+error: --precision out of range (0..16)
+```
+
+(Negative lower bounds and quantity ranges are not yet enforced; positive
+integer bounds are. In v1, declared ranges are not enforced.)
+
+### 27.5 Typed fields inside compound records
+
+A quantity, choice, integer, bool, or float field inside a `name = { … }`
+compound now generates real typed storage (the quantity struct, the choice
+enum, a sized int, …) and per-field parsing, for both single and repeatable
+(`multiple`) records. Inline choice (`field : (a, b, c)`) is not accepted inside
+a compound — declare a named choice type and reference it instead.
+
+---
+
+*v2 additions documented for 0.4.0.*
+

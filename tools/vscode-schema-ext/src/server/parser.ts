@@ -1191,6 +1191,19 @@ class ParserState {
                 node.range.end = high.range.end;
             }
         }
+        // optional `units [ a, b, c ]` (v2) — restrict accepted unit suffixes
+        if (this.match("Identifier", "units") && this.peek(1).type === "LBracket") {
+            this.advance(); // units
+            this.advance(); // [
+            node.units = [];
+            while (!this.match("RBracket") && this.peek().type !== "EOF") {
+                const ut = this.peek();
+                if (ut.type === "Identifier") node.units.push(ut.value);
+                this.advance();
+            }
+            const close = this.consume("RBracket", "Expected ']' to close units list");
+            if (close) node.range.end = close.end;
+        }
         return node;
     }
 

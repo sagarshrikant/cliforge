@@ -627,7 +627,7 @@
     "qualifier-keywords": {
       "patterns": [
         {
-          "match": "\\b(type|short|default|required|visible|multiple|alias|depends-on|conflicts|allowed|sensitive|deprecated|display-unit|unique|help|details|note|example|since)\\b",
+          "match": "\\b(type|short|default|required|visible|multiple|alias|depends-on|conflicts|allowed|sensitive|deprecated|display-unit|on-error|units|unique|help|details|note|example|since)\\b",
           "name": "support.type.property-name.cliforge"
         },
         {

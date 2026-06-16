@@ -296,7 +296,17 @@ static void parse_inline_compound(cf_parser_t *p, cf_type_expr_t *expr)
         if (!expect(p, CF_TOK_COLON)) { skip_block(p); return; }
 
         /* field type */
-        if (at(p, CF_TOK_IDENT)) {
+        if (at(p, CF_TOK_LPAREN)) {
+            /* Inline choice is not supported directly as a compound field
+             * (it would either bloat the AST or require deferred type
+             * synthesis).  Declaring a named choice type and referencing it
+             * is the supported, cleaner form. */
+            error(p, "inline choice not supported as a compound field; "
+                     "declare a named choice type (e.g. 'kind = (a, b, c)') "
+                     "and use 'field : kind'");
+            skip_block(p);
+            return;
+        } else if (at(p, CF_TOK_IDENT)) {
             const cf_token_t *t = cur(p);
             cf_base_type_t base = tok_to_base_type(t->start, t->len);
             if (base != CF_TYPE_NONE) {
@@ -387,6 +397,28 @@ static void parse_type_expr(cf_parser_t *p, cf_type_expr_t *expr)
             if (at(p, CF_TOK_RANGE)) advance(p);
             if (at(p, CF_TOK_NUMBER) || at(p, CF_TOK_QUANTITY)) {
                 take_text(p, expr->range_hi, CF_MAX_IDENT_LEN);
+            }
+        }
+        /* optional accepted-unit list: 'units [ a, b, c ]' (v2) */
+        if (at_kw(p, "units")) {
+            advance(p);
+            if (at(p, CF_TOK_LBRACKET)) {
+                advance(p);
+                while (!at(p, CF_TOK_RBRACKET) && !at(p, CF_TOK_EOF)) {
+                    if (at(p, CF_TOK_IDENT)) {
+                        if (expr->nunits < CF_MAX_MEMBERS) {
+                            take_text(p, expr->units[expr->nunits], 8U);
+                            expr->nunits++;
+                        } else {
+                            advance(p);
+                        }
+                    } else if (at(p, CF_TOK_COMMA)) {
+                        advance(p);
+                    } else {
+                        advance(p);
+                    }
+                }
+                expect(p, CF_TOK_RBRACKET);
             }
         }
     } else {
@@ -588,6 +620,11 @@ static void parse_option_block(cf_parser_t *p, cf_option_t *opt)
         } else if (at_kw(p, "display-unit")) {
             advance(p); expect(p, CF_TOK_ASSIGN);
             take_text(p, opt->display_unit, sizeof(opt->display_unit));
+        } else if (at_kw(p, "on-error")) {
+            advance(p); expect(p, CF_TOK_ASSIGN);
+            if (at_kw(p, "warn"))      { opt->on_error = CF_ONERR_WARN; advance(p); }
+            else if (at_kw(p, "exit")) { opt->on_error = CF_ONERR_EXIT; advance(p); }
+            else                       { advance(p); }
         } else if (at_kw(p, "help")) {
             advance(p); expect(p, CF_TOK_ASSIGN);
             if (at(p, CF_TOK_STRING)) {
@@ -1040,6 +1077,14 @@ static void parse_meta(cf_parser_t *p, cf_meta_t *meta)
     while (!at(p, CF_TOK_RBRACE) && !at(p, CF_TOK_EOF)) {
         if (!at(p, CF_TOK_IDENT)) { advance(p); continue; }
 
+        if (at_kw(p, "on-error")) {
+            advance(p); expect(p, CF_TOK_ASSIGN);
+            if (at_kw(p, "warn"))      { meta->on_error = CF_ONERR_WARN; advance(p); }
+            else if (at_kw(p, "exit")) { meta->on_error = CF_ONERR_EXIT; advance(p); }
+            else                       { advance(p); }
+            continue;
+        }
+
 #define META_STR_KEY(kw, field) \
         if (at_kw(p, kw)) { \
             advance(p); expect(p, CF_TOK_ASSIGN); \
@@ -1111,9 +1156,19 @@ int cf_parse(const cf_token_t *tokens, unsigned int ntokens,
             cf_str_eq_tok("@schema", cur(&p)->start, cur(&p)->len)) {
             advance(&p);
             if (at_kw(&p, "cliforge")) advance(&p);
-            if (at(&p, CF_TOK_IDENT) &&
-                cf_str_eq_tok("v1", cur(&p)->start, cur(&p)->len)) {
-                out->schema_version = 1U;
+            /* schema version: accept vN (v1, v2, ...). Features added in a
+             * later version are gated on out->schema_version so that older
+             * schemas keep their original behaviour. */
+            if (at(&p, CF_TOK_IDENT) && cur(&p)->len >= 2U &&
+                cur(&p)->start[0] == 'v') {
+                unsigned int v = 0U;
+                unsigned int k;
+                for (k = 1U; k < cur(&p)->len; k++) {
+                    char c = cur(&p)->start[k];
+                    if (c < '0' || c > '9') { v = 0U; break; }
+                    v = (v * 10U) + (unsigned int)(c - '0');
+                }
+                if (v != 0U) out->schema_version = v;
                 advance(&p);
             }
             out->schema_present = 1;

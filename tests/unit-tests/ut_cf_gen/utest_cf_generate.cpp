@@ -78,7 +78,9 @@ static std::string make_tmpdir()
 static void rm_tmpdir(const std::string &dir)
 {
     if (dir.empty() || dir.rfind("/tmp/", 0) != 0) return;
-    (void)std::system(("rm -rf " + dir).c_str()); /* LCOV_EXCL_LINE */
+    int x = std::system(("rm -rf " + dir).c_str()); /* LCOV_EXCL_LINE */
+
+    (void)x;
 }
 
 /* Minimal schema — prefix "CT", output "cmdline". */

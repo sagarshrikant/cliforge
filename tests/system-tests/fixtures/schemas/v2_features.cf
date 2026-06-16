@@ -1,0 +1,26 @@
+@schema cliforge v2
+
+/*! v2 feature demonstration schema (domain-neutral). */
+meta {
+    app      = "v2demo"
+    prefix   = "v2"
+    output   = "cmdline"
+    on-error = exit
+}
+
+mode = (fast, safe, debug)
+verbosity_t = (quiet, normal, loud)
+
+spec = {
+    level  : uint8 in 0..9
+    mode   : mode
+    period : duration
+    size   : bytes
+}
+
+section "Options" {
+    option verbosity { type = verbosity_t; default = normal; help = "verbosity" }
+    option timeout   { type = duration units [ms, s]; default = 250ms; help = "timeout" }
+    option retries   { type = uint8 in 0..5; on-error = warn; default = 1; help = "retries" }
+    option job       { type = spec; help = "job specification" }
+}

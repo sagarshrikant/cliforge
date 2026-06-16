@@ -55,10 +55,12 @@ export function validate(file: SchemaFile): ParseDiagnostic[] {
                 severity: "error",
                 code: "bad-schema-version",
             });
-        } else if (file.directive.version && file.directive.version !== "v1") {
+        } else if (file.directive.version &&
+                   file.directive.version !== "v1" &&
+                   file.directive.version !== "v2") {
             diags.push({
                 range: file.directive.range,
-                message: `This extension only understands schema version 'v1' (got '${file.directive.version}')`,
+                message: `This extension understands schema versions 'v1' and 'v2' (got '${file.directive.version}')`,
                 severity: "warning",
                 code: "unknown-schema-version",
             });
@@ -342,14 +344,15 @@ function checkTypeAndDefault(
     // Quantity types: warn if no unit arg supplied and no display-unit qualifier present
     if (QUANTITY_TYPES.has(base)) {
         const hasDisplayUnit = o.qualifiers.some(q => q.key === "display-unit");
-        if (tv.args.length === 0 && !hasDisplayUnit) {
+        const hasUnitList = Array.isArray((tv as any).units) && (tv as any).units.length > 0;
+        if (tv.args.length === 0 && !hasDisplayUnit && !hasUnitList) {
             diags.push({
                 range: tv.range,
                 message: `${base} requires a display hint (e.g. display-unit = "ms") for documentation`,
                 severity: "warning",
                 code: "missing-quantity-display-unit",
             });
-        } else if (base !== "ratio") {
+        } else if (base !== "ratio" && tv.args.length > 0) {
             const targetArg = tv.args[0];
             const targetUnit = targetArg.name;
             const group = UNIT_GROUP[targetUnit];
