@@ -34,6 +34,7 @@ typedef struct gen_ctx {
     FILE *fc;   /* .c output */
     FILE *fmd;  /* .md output */
     int   has_compound;                 /* any option uses compound type? */
+    int   had_error;                    /* generate-time validation error */
 } gen_ctx_t;
 
 /* -------------------------------------------------------------------------
@@ -64,8 +65,109 @@ static void enum_val(gen_ctx_t *g, const char *opt_cname,
                      const char *member, char *dst, unsigned int dstsz)
 {
     char m[CF_MAX_IDENT_LEN];
+    char o[CF_MAX_IDENT_LEN];
     str_upper(m, member, sizeof(m));
-    (void)snprintf(dst, (size_t)dstsz, "%s_%s_%s", g->PREFIX, opt_cname, m);
+    str_upper(o, opt_cname, sizeof(o));
+    (void)snprintf(dst, (size_t)dstsz, "%s_%s_%s", g->PREFIX, o, m);
+}
+
+/* Resolve the validation-failure policy for an option.  Returns 1 for
+ * WARN (report and keep the default, continue parsing) and 0 for EXIT
+ * (report and fail the parse).  Only honoured under @schema cliforge v2 —
+ * v1 output is byte-for-byte unchanged. */
+static int on_error_warn(const gen_ctx_t *g, const cf_option_t *opt)
+{
+    if (g->file->schema_version < 2U) return 0;
+    if (opt != NULL && opt->on_error == CF_ONERR_WARN) return 1;
+    if (opt != NULL && opt->on_error == CF_ONERR_EXIT) return 0;
+    return (g->file->meta.on_error == CF_ONERR_WARN) ? 1 : 0;
+}
+
+/* Emit the trailing else-branch of a choice comparison chain, applying the
+ * on-error policy.  v1 keeps the original message and always fails. */
+static void emit_choice_else(gen_ctx_t *g, const cf_option_t *opt,
+                             const char *long_name,
+                             const char members[][CF_MAX_IDENT_LEN],
+                             unsigned int nmembers)
+{
+    char         allowed[CF_MAX_MEMBERS * (CF_MAX_IDENT_LEN + 1U)];
+    unsigned int am;
+
+    allowed[0] = '\0';
+    for (am = 0U; am < nmembers; am++) {
+        if (am > 0U) {
+            (void)strncat(allowed, "|",
+                          sizeof(allowed) - strlen(allowed) - 1U);
+        }
+        (void)strncat(allowed, members[am],
+                      sizeof(allowed) - strlen(allowed) - 1U);
+    }
+
+    if (g->file->schema_version >= 2U) {
+        if (on_error_warn(g, opt)) {
+            fprintf(g->fc,
+                "\t\t\telse { fprintf(stderr, \"warning: --%s: got '%%s', "
+                "allowed: %s (keeping default)\\n\", val); }\n"
+                "\t\t\tcontinue;\n",
+                long_name, allowed);
+        } else {
+            fprintf(g->fc,
+                "\t\t\telse { fprintf(stderr, \"error: --%s: got '%%s', "
+                "allowed: %s\\n\", val); return -1; }\n"
+                "\t\t\tcontinue;\n",
+                long_name, allowed);
+        }
+    } else {
+        fprintf(g->fc,
+            "\t\t\telse { fprintf(stderr, \"error: invalid value for "
+            "--%s: %%s\\n\", val); return -1; }\n"
+            "\t\t\tcontinue;\n",
+            long_name);
+    }
+}
+
+/* Emit an integer range check after the value is parsed, applying the
+ * on-error policy.  v2-only; integer types only.  Avoids unsigned<0
+ * comparisons (which warn) by skipping the lower bound when it is 0 on an
+ * unsigned type. */
+static void emit_range_check(gen_ctx_t *g, const cf_option_t *opt,
+                             const char *ln, const char *path,
+                             const cf_type_expr_t *expr)
+{
+    int is_uns;
+    int skip_lo;
+
+    if (g->file->schema_version < 2U || !expr->has_range) return;
+    if (expr->range_lo[0] == '\0' || expr->range_hi[0] == '\0') return;
+
+    is_uns  = (expr->base >= CF_TYPE_UINT8 && expr->base <= CF_TYPE_UINT64);
+    skip_lo = (is_uns && strcmp(expr->range_lo, "0") == 0);
+
+    if (on_error_warn(g, opt)) {
+        if (!skip_lo) {
+            fprintf(g->fc,
+                "\t\t\tif (out->%s < %s) { fprintf(stderr, \"warning: --%s "
+                "out of range (%s..%s), clamped\\n\"); out->%s = %s; }\n",
+                path, expr->range_lo, ln, expr->range_lo, expr->range_hi,
+                path, expr->range_lo);
+        }
+        fprintf(g->fc,
+            "\t\t\tif (out->%s > %s) { fprintf(stderr, \"warning: --%s "
+            "out of range (%s..%s), clamped\\n\"); out->%s = %s; }\n",
+            path, expr->range_hi, ln, expr->range_lo, expr->range_hi,
+            path, expr->range_hi);
+    } else if (!skip_lo) {
+        fprintf(g->fc,
+            "\t\t\tif (out->%s < %s || out->%s > %s) { fprintf(stderr, "
+            "\"error: --%s out of range (%s..%s)\\n\"); return -1; }\n",
+            path, expr->range_lo, path, expr->range_hi, ln,
+            expr->range_lo, expr->range_hi);
+    } else {
+        fprintf(g->fc,
+            "\t\t\tif (out->%s > %s) { fprintf(stderr, "
+            "\"error: --%s out of range (%s..%s)\\n\"); return -1; }\n",
+            path, expr->range_hi, ln, expr->range_lo, expr->range_hi);
+    }
 }
 
 /* Map cf_base_type to C type string */
@@ -123,6 +225,74 @@ static const cf_type_expr_t *resolve_alias(const cf_schema_file_t *f,
  * Header generation
  * ====================================================================== */
 
+/* =====================================================================
+ *  Unit-aware quantity types (v2)
+ *
+ *  For each quantity group actually used by the schema we emit a typed
+ *  { value, unit } struct, a unit enum, and a conversion helper to the
+ *  group's base unit.  v1 output is unchanged (plain uint64_t).
+ * ===================================================================== */
+typedef struct {
+    cf_base_type_t base;
+    const char    *gname;       /* "duration"            */
+    const char    *to_suffix;   /* helper name suffix: "ns"/"bytes"/"hz" */
+    const char    *units[10];   /* accepted suffixes, NULL terminated    */
+    const char    *mults[10];   /* multiplier to base unit (uint64 expr) */
+} cf_qgroup_t;
+
+static const cf_qgroup_t CF_QGROUPS[] = {
+    { CF_TYPE_DURATION, "duration", "ns",
+      { "ns","us","ms","s","m","h","d", NULL },
+      { "1UL","1000UL","1000000UL","1000000000UL",
+        "60000000000UL","3600000000000UL","86400000000000UL", NULL } },
+    { CF_TYPE_BYTES, "bytes", "bytes",
+      { "B","KB","KiB","MB","MiB","GB","GiB","TB","TiB", NULL },
+      { "1UL","1000UL","1024UL","1000000UL","1048576UL","1000000000UL",
+        "1073741824UL","1000000000000UL","1099511627776UL", NULL } },
+    { CF_TYPE_FREQUENCY, "frequency", "hz",
+      { "Hz","kHz","MHz","GHz", NULL },
+      { "1UL","1000UL","1000000UL","1000000000UL", NULL } }
+};
+#define CF_NQGROUPS (sizeof(CF_QGROUPS) / sizeof(CF_QGROUPS[0]))
+
+/* Is a quantity group used anywhere (top-level + section options, and
+ * compound fields)?  Determines which typed structs/helpers to emit. */
+static int quantity_used(const cf_schema_file_t *f, cf_base_type_t base)
+{
+    unsigned int i, j, k;
+    for (i = 0U; i < f->noptions; i++)
+        if (f->options[i].type.base == base) return 1;
+    for (i = 0U; i < f->nsections; i++) {
+        const cf_section_t *sec = &f->sections[i];
+        for (j = 0U; j < sec->noptions; j++)
+            if (sec->options[j].type.base == base) return 1;
+    }
+    /* compound fields within named types (top-level + section) */
+    for (i = 0U; i < f->nnamed_types; i++) {
+        const cf_type_expr_t *e = &f->named_types[i].expr;
+        for (k = 0U; k < e->nfields; k++)
+            if (e->fields[k].base == base) return 1;
+    }
+    for (i = 0U; i < f->nsections; i++) {
+        const cf_section_t *sec = &f->sections[i];
+        for (j = 0U; j < sec->nnamed_types; j++) {
+            const cf_type_expr_t *e = &sec->named_types[j].expr;
+            for (k = 0U; k < e->nfields; k++)
+                if (e->fields[k].base == base) return 1;
+        }
+    }
+    return 0;
+}
+
+/* Look up the quantity group descriptor for a base type, or NULL. */
+static const cf_qgroup_t *qgroup_for(cf_base_type_t base)
+{
+    unsigned int gi;
+    for (gi = 0U; gi < CF_NQGROUPS; gi++)
+        if (CF_QGROUPS[gi].base == base) return &CF_QGROUPS[gi];
+    return NULL;
+}
+
 /* Emit all named choice / compound type definitions */
 static void gen_named_types(gen_ctx_t *g, const cf_named_type_t *types,
                              unsigned int n)
@@ -164,10 +334,19 @@ static void gen_named_types(gen_ctx_t *g, const cf_named_type_t *types,
                     opt_c_name(acname, fld->alias_name, sizeof(acname));
                     fprintf(g->fh, "\t%s_%s_t\t%s;\n",
                             g->prefix, acname, fcname);
+                } else if (g->file->schema_version >= 2U &&
+                           qgroup_for(fld->base) != NULL) {
+                    /* v2: typed quantity field { value, unit } */
+                    const cf_qgroup_t *fqg = qgroup_for(fld->base);
+                    fprintf(g->fh, "\tstruct %s_%s\t%s;\n",
+                            g->prefix, fqg->gname, fcname);
+                } else if (g->file->schema_version >= 2U &&
+                           fld->base != CF_TYPE_RATIO) {
+                    /* v2: numeric / bool / float fields get their real C type */
+                    fprintf(g->fh, "\t%s\t%s;\n",
+                            c_type_str(fld->base), fcname);
                 } else {
-                    /* Numeric/bool/quantity fields in compound types are emitted
-                     * as char[] buffers so cf__parse_compound can strncpy into
-                     * them. V1 callers do their own strtoul/strtod conversion. */
+                    /* v1 (and ratio): char[] buffer, app converts */
                     unsigned int nslen = (fld->str_len > 0U) ? fld->str_len : 64U;
                     fprintf(g->fh, "\tchar\t%s[%u];\n", fcname, nslen);
                 }
@@ -176,6 +355,7 @@ static void gen_named_types(gen_ctx_t *g, const cf_named_type_t *types,
         }
     }
 }
+
 
 /* Emit a field declaration for one option inside the cmdline struct */
 static void emit_option_field(gen_ctx_t *g, const cf_option_t *opt,
@@ -247,8 +427,16 @@ static void emit_option_field(gen_ctx_t *g, const cf_option_t *opt,
         } else {
             fprintf(g->fh, "%sint\t%s;\n", indent, cname);
         }
+    } else if (expr->base == CF_TYPE_COMPOUND &&
+               g->file->schema_version >= 2U &&
+               opt->type.base == CF_TYPE_ALIAS) {
+        /* v2: a named compound option references its typed typedef so the
+         * fields keep their real types (int/struct/enum). */
+        char acname[CF_MAX_IDENT_LEN];
+        opt_c_name(acname, opt->type.alias_name, sizeof(acname));
+        fprintf(g->fh, "%sstruct %s_%s\t%s;\n", indent, g->prefix, acname, cname);
     } else if (expr->base == CF_TYPE_COMPOUND) {
-        /* inline compound — emit anonymous struct */
+        /* inline compound (or v1) — emit anonymous struct */
         unsigned int fi;
         fprintf(g->fh, "%sstruct {\n", indent);
         for (fi = 0U; fi < expr->nfields; fi++) {
@@ -279,9 +467,90 @@ static void emit_option_field(gen_ctx_t *g, const cf_option_t *opt,
         }
     } else if (expr->base == CF_TYPE_DURATION || expr->base == CF_TYPE_BYTES ||
                expr->base == CF_TYPE_FREQUENCY || expr->base == CF_TYPE_RATIO) {
-        fprintf(g->fh, "%suint64_t\t%s;\n", indent, cname);
+        const cf_qgroup_t *qg = qgroup_for(expr->base);
+        if (g->file->schema_version >= 2U && qg != NULL) {
+            fprintf(g->fh, "%sstruct %s_%s\t%s;\n",
+                    indent, g->prefix, qg->gname, cname);
+        } else {
+            fprintf(g->fh, "%suint64_t\t%s;\n", indent, cname);
+        }
     } else {
         fprintf(g->fh, "%s%s\t%s;\n", indent, c_type_str(expr->base), cname);
+    }
+}
+
+/* Header declarations: enum + struct + conversion-helper prototype. */
+static void gen_quantity_decls(gen_ctx_t *g)
+{
+    unsigned int gi, ui;
+    char gup[CF_MAX_IDENT_LEN];
+
+    if (g->file->schema_version < 2U) return;
+
+    for (gi = 0U; gi < CF_NQGROUPS; gi++) {
+        const cf_qgroup_t *q = &CF_QGROUPS[gi];
+        if (!quantity_used(g->file, q->base)) continue;
+        str_upper(gup, q->gname, sizeof(gup));
+
+        fprintf(g->fh, "enum %s_%s_unit {\n", g->prefix, q->gname);
+        for (ui = 0U; q->units[ui] != NULL; ui++) {
+            char u[16];
+            str_upper(u, q->units[ui], sizeof(u));
+            fprintf(g->fh, "\t%s_%s_%s%s\n",
+                    g->PREFIX, gup, u, (q->units[ui + 1U] != NULL) ? "," : "");
+        }
+        fprintf(g->fh, "};\n");
+        fprintf(g->fh,
+                "struct %s_%s { uint64_t value; enum %s_%s_unit unit; };\n",
+                g->prefix, q->gname, g->prefix, q->gname);
+        fprintf(g->fh,
+                "uint64_t %s_%s_to_%s(const struct %s_%s *q);\n\n",
+                g->prefix, q->gname, q->to_suffix, g->prefix, q->gname);
+    }
+}
+
+/* Source definitions: a parse function (value+suffix -> struct) and the
+ * base-unit conversion helper, per used group. */
+static void gen_quantity_defs(gen_ctx_t *g)
+{
+    unsigned int gi, ui;
+    char gup[CF_MAX_IDENT_LEN];
+
+    if (g->file->schema_version < 2U) return;
+
+    for (gi = 0U; gi < CF_NQGROUPS; gi++) {
+        const cf_qgroup_t *q = &CF_QGROUPS[gi];
+        if (!quantity_used(g->file, q->base)) continue;
+        str_upper(gup, q->gname, sizeof(gup));
+
+        /* parser: read magnitude, then match the unit suffix */
+        fprintf(g->fc,
+            "static int cf__parse_%s(const char *s, struct %s_%s *o)\n{\n"
+            "\tchar *e;\n"
+            "\to->value = (uint64_t)strtoul(s, &e, 10);\n",
+            q->gname, g->prefix, q->gname);
+        for (ui = 0U; q->units[ui] != NULL; ui++) {
+            char u[16];
+            str_upper(u, q->units[ui], sizeof(u));
+            fprintf(g->fc,
+                "\t%sif (strcmp(e, \"%s\") == 0) o->unit = %s_%s_%s;\n",
+                (ui == 0U) ? "" : "else ",
+                q->units[ui], g->PREFIX, gup, u);
+        }
+        fprintf(g->fc, "\telse return -1;\n\treturn 0;\n}\n\n");
+
+        /* converter to base unit */
+        fprintf(g->fc,
+            "uint64_t %s_%s_to_%s(const struct %s_%s *q)\n{\n\tswitch (q->unit) {\n",
+            g->prefix, q->gname, q->to_suffix, g->prefix, q->gname);
+        for (ui = 0U; q->units[ui] != NULL; ui++) {
+            char u[16];
+            str_upper(u, q->units[ui], sizeof(u));
+            fprintf(g->fc,
+                "\tcase %s_%s_%s: return q->value * %s;\n",
+                g->PREFIX, gup, u, q->mults[ui]);
+        }
+        fprintf(g->fc, "\tdefault: return q->value;\n\t}\n}\n\n");
     }
 }
 
@@ -313,6 +582,9 @@ static void gen_header(gen_ctx_t *g)
         }
         fprintf(g->fh, "\n} %s_subcmd_t;\n\n", g->prefix);
     }
+
+    /* Quantity structs first — named compound typedefs may embed them. */
+    gen_quantity_decls(g);
 
     /* Named types from top-level and all sections */
     gen_named_types(g, g->file->named_types, g->file->nnamed_types);
@@ -529,21 +801,45 @@ static void emit_default(gen_ctx_t *g, const flat_opt_t *e)
                 e->struct_path, opt->default_val);
     } else if (expr->base == CF_TYPE_DURATION || expr->base == CF_TYPE_BYTES ||
                expr->base == CF_TYPE_FREQUENCY || expr->base == CF_TYPE_RATIO) {
-        /* strip unit suffix from quantity default; emit the numeric part */
-        const char *p2 = opt->default_val;
-        char numpart[CF_MAX_IDENT_LEN];
-        unsigned int ni = 0U;
-        while (*p2 && ((*p2 >= '0' && *p2 <= '9') || *p2 == '_' || *p2 == '.')) {
-            if (*p2 != '_') numpart[ni++] = *p2; /* skip _ separators */
-            p2++;
-        }
-        numpart[ni] = '\0';
-        if (ni > 0U) {
-            fprintf(g->fc, "\tout->%s = %s; /* %s */\n",
-                    e->struct_path, numpart, opt->default_val);
+        const cf_qgroup_t *qg = qgroup_for(expr->base);
+        if (g->file->schema_version >= 2U && qg != NULL &&
+            opt->default_val[0] != '\0') {
+            /* generate-time check: the default's unit must be allowed */
+            if (expr->nunits > 0U) {
+                const char *du = opt->default_val;
+                unsigned int duok = 0U, uk;
+                while (*du && ((*du >= '0' && *du <= '9') ||
+                               *du == '.' || *du == '_')) du++;
+                for (uk = 0U; uk < expr->nunits; uk++) {
+                    if (strcmp(du, expr->units[uk]) == 0) { duok = 1U; break; }
+                }
+                if (!duok) {
+                    fprintf(stderr, "cliforge: option '%s': default '%s' "
+                            "uses a unit not in its units list\n",
+                            opt->name, opt->default_val);
+                    g->had_error = 1;
+                }
+            }
+            /* parse the default string into the typed { value, unit } */
+            fprintf(g->fc, "\t(void)cf__parse_%s(\"%s\", &out->%s);\n",
+                    qg->gname, opt->default_val, e->struct_path);
         } else {
-            fprintf(g->fc, "\tout->%s = 0; /* %s */\n",
-                    e->struct_path, opt->default_val);
+            /* v1 (or ratio): strip unit suffix, emit the numeric part */
+            const char *p2 = opt->default_val;
+            char numpart[CF_MAX_IDENT_LEN];
+            unsigned int ni = 0U;
+            while (*p2 && ((*p2 >= '0' && *p2 <= '9') || *p2 == '_' || *p2 == '.')) {
+                if (*p2 != '_') numpart[ni++] = *p2;
+                p2++;
+            }
+            numpart[ni] = '\0';
+            if (ni > 0U) {
+                fprintf(g->fc, "\tout->%s = %s; /* %s */\n",
+                        e->struct_path, numpart, opt->default_val);
+            } else {
+                fprintf(g->fc, "\tout->%s = 0; /* %s */\n",
+                        e->struct_path, opt->default_val);
+            }
         }
     } else if (expr->base == CF_TYPE_FLOAT || expr->base == CF_TYPE_DOUBLE) {
         /* Float/double defaults are valid C literals (0.5, 1e-9, -1.0, etc.)
@@ -581,6 +877,115 @@ static void emit_default(gen_ctx_t *g, const flat_opt_t *e)
             fprintf(g->fc, "\tout->%s = 0;\n", e->struct_path);
         }
     }
+}
+
+/* Emit a v2 typed-compound field parser.  `rec` is the record accessor
+ * (e.g. "out->main." or "rec->").  String/path/ratio fields are copied
+ * directly; numeric, bool, float, quantity and choice fields are read into
+ * a temp string and then converted into their typed storage. */
+static void emit_typed_compound_parse(gen_ctx_t *g, const cf_named_type_t *nt,
+                                      const char *rec)
+{
+    unsigned int fi;
+    unsigned int nf = nt->expr.nfields;
+
+#define CF_FLD_STRLIKE(b) ((b) == CF_TYPE_STRING || (b) == CF_TYPE_PATH || \
+                           (b) == CF_TYPE_FILE   || (b) == CF_TYPE_DIR  || \
+                           (b) == CF_TYPE_RATIO)
+
+    fprintf(g->fc, "\t\t\t{\n");
+    /* declarations first (C89) */
+    for (fi = 0U; fi < nf; fi++) {
+        const cf_field_t *fld = &nt->expr.fields[fi];
+        char fcn[CF_MAX_IDENT_LEN];
+        opt_c_name(fcn, fld->name, sizeof(fcn));
+        if (!CF_FLD_STRLIKE(fld->base))
+            fprintf(g->fc, "\t\t\tchar cf__t_%s[64];\n", fcn);
+    }
+    fprintf(g->fc, "\t\t\tcf__kv_t cf__f_[%u];\n", nf);
+    /* init temps */
+    for (fi = 0U; fi < nf; fi++) {
+        const cf_field_t *fld = &nt->expr.fields[fi];
+        char fcn[CF_MAX_IDENT_LEN];
+        opt_c_name(fcn, fld->name, sizeof(fcn));
+        if (!CF_FLD_STRLIKE(fld->base))
+            fprintf(g->fc, "\t\t\tcf__t_%s[0] = '\\0';\n", fcn);
+    }
+    /* kv setup */
+    for (fi = 0U; fi < nf; fi++) {
+        const cf_field_t *fld = &nt->expr.fields[fi];
+        char fcn[CF_MAX_IDENT_LEN];
+        unsigned int slen;
+        opt_c_name(fcn, fld->name, sizeof(fcn));
+        slen = (fld->str_len > 0U) ? fld->str_len : 64U;
+        if (CF_FLD_STRLIKE(fld->base)) {
+            fprintf(g->fc,
+                "\t\t\tcf__f_[%u].key = \"%s\"; cf__f_[%u].dst = (char*)&%s%s; "
+                "cf__f_[%u].dstsz = %uU;\n",
+                fi, fld->name, fi, rec, fcn, fi, slen);
+        } else {
+            fprintf(g->fc,
+                "\t\t\tcf__f_[%u].key = \"%s\"; cf__f_[%u].dst = cf__t_%s; "
+                "cf__f_[%u].dstsz = 64U;\n",
+                fi, fld->name, fi, fcn, fi);
+        }
+    }
+    fprintf(g->fc, "\t\t\tcf__parse_compound(val, cf__f_, %u);\n", nf);
+    /* conversions */
+    for (fi = 0U; fi < nf; fi++) {
+        const cf_field_t *fld = &nt->expr.fields[fi];
+        char fcn[CF_MAX_IDENT_LEN];
+        opt_c_name(fcn, fld->name, sizeof(fcn));
+        if (CF_FLD_STRLIKE(fld->base)) continue;
+
+        if (qgroup_for(fld->base) != NULL) {
+            const cf_qgroup_t *fqg = qgroup_for(fld->base);
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') (void)cf__parse_%s(cf__t_%s, &%s%s);\n",
+                fcn, fqg->gname, fcn, rec, fcn);
+        } else if (fld->base == CF_TYPE_ALIAS) {
+            const cf_named_type_t *an = find_named_type(g->file, fld->alias_name);
+            if (an != NULL && an->expr.base == CF_TYPE_CHOICE) {
+                char acn[CF_MAX_IDENT_LEN];
+                unsigned int m;
+                opt_c_name(acn, fld->alias_name, sizeof(acn));
+                fprintf(g->fc, "\t\t\tif (cf__t_%s[0] != '\\0') {\n", fcn);
+                for (m = 0U; m < an->expr.nmembers; m++) {
+                    char eval[CF_MAX_IDENT_LEN * 3];
+                    enum_val(g, acn, an->expr.members[m], eval, sizeof(eval));
+                    fprintf(g->fc,
+                        "\t\t\t\t%sif (strcmp(cf__t_%s, \"%s\") == 0) %s%s = %s;\n",
+                        (m == 0U) ? "" : "else ",
+                        fcn, an->expr.members[m], rec, fcn, eval);
+                }
+                fprintf(g->fc, "\t\t\t}\n");
+            }
+            /* alias->compound: nested compound unsupported, value discarded */
+        } else if (fld->base == CF_TYPE_BOOL || fld->base == CF_TYPE_FLAG) {
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') %s%s = (strcmp(cf__t_%s, \"true\") == 0 "
+                "|| strcmp(cf__t_%s, \"1\") == 0) ? 1 : 0;\n",
+                fcn, rec, fcn, fcn, fcn);
+        } else if (fld->base == CF_TYPE_FLOAT) {
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') %s%s = (float)strtod(cf__t_%s, NULL);\n",
+                fcn, rec, fcn, fcn);
+        } else if (fld->base == CF_TYPE_DOUBLE) {
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') %s%s = strtod(cf__t_%s, NULL);\n",
+                fcn, rec, fcn, fcn);
+        } else if (fld->base >= CF_TYPE_UINT8 && fld->base <= CF_TYPE_UINT64) {
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') %s%s = (%s)strtoul(cf__t_%s, NULL, 0);\n",
+                fcn, rec, fcn, c_type_str(fld->base), fcn);
+        } else {
+            fprintf(g->fc,
+                "\t\t\tif (cf__t_%s[0] != '\\0') %s%s = (%s)strtol(cf__t_%s, NULL, 0);\n",
+                fcn, rec, fcn, c_type_str(fld->base), fcn);
+        }
+    }
+    fprintf(g->fc, "\t\t\t}\n");
+#undef CF_FLD_STRLIKE
 }
 
 /* Emit the type-specific value parser for one option */
@@ -657,16 +1062,36 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
                             (m == 0U) ? "" : "else ",
                             nt->expr.members[m], e->struct_path, eval);
                 }
-                fprintf(g->fc,
-                        "\t\t\telse { fprintf(stderr, \"error: invalid value for --%s: %%s\\n\", val); return -1; }\n"
-                        "\t\t\tcontinue;\n",
-                        e->long_name);
+                emit_choice_else(g, opt, e->long_name,
+                                 nt->expr.members, nt->expr.nmembers);
             }
         } else if (nt != NULL && nt->expr.base == CF_TYPE_COMPOUND) {
             /* Compound type: parse key=value,key=value */
             char acname[CF_MAX_IDENT_LEN];
             unsigned int fi;
             opt_c_name(acname, expr->alias_name, sizeof(acname));
+            if (g->file->schema_version >= 2U) {
+                if (opt->multiple.enabled && opt->multiple.max > 1U) {
+                    fprintf(g->fc,
+                        "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
+                        "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n"
+                        "\t\t\tif (out->%s_count < %u) {\n"
+                        "\t\t\tstruct %s_%s *rec = &out->%s[out->%s_count++];\n",
+                        e->long_name, e->struct_path, opt->multiple.max,
+                        g->prefix, acname, e->struct_path, e->struct_path);
+                    emit_typed_compound_parse(g, nt, "rec->");
+                    fprintf(g->fc, "\t\t\t}\n\t\t\tcontinue;\n");
+                } else {
+                    char racc[CF_MAX_IDENT_LEN * 2 + 8];
+                    fprintf(g->fc,
+                        "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
+                        "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n",
+                        e->long_name);
+                    (void)snprintf(racc, sizeof(racc), "out->%s.", e->struct_path);
+                    emit_typed_compound_parse(g, nt, racc);
+                    fprintf(g->fc, "\t\t\tcontinue;\n");
+                }
+            } else {
             if (opt->multiple.enabled && opt->multiple.max > 1U) {
                 unsigned int maxn = opt->multiple.max;
                 fprintf(g->fc,
@@ -711,7 +1136,8 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
                 fprintf(g->fc, "\t\t\tcf__parse_compound(val, cf__f_, %u); }\n\t\t\tcontinue;\n",
                         (unsigned int)nt->expr.nfields);
             }
-        } else {
+            }
+                } else {
             /* unresolved alias — treat as string */
             fprintf(g->fc,
                     "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
@@ -736,9 +1162,10 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
             fprintf(g->fc,
                     "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
                     "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n"
-                    "\t\t\tout->%s = (%s)strtol(val, NULL, 0);\n"
-                    "\t\t\tcontinue;\n",
+                    "\t\t\tout->%s = (%s)strtol(val, NULL, 0);\n",
                     e->long_name, e->struct_path, c_type_str(expr->base));
+            emit_range_check(g, e->opt, e->long_name, e->struct_path, expr);
+            fprintf(g->fc, "\t\t\tcontinue;\n");
         }
         return;
     case CF_TYPE_UINT8:  case CF_TYPE_UINT16:
@@ -755,9 +1182,10 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
             fprintf(g->fc,
                     "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
                     "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n"
-                    "\t\t\tout->%s = (%s)strtoul(val, NULL, 0);\n"
-                    "\t\t\tcontinue;\n",
+                    "\t\t\tout->%s = (%s)strtoul(val, NULL, 0);\n",
                     e->long_name, e->struct_path, c_type_str(expr->base));
+            emit_range_check(g, e->opt, e->long_name, e->struct_path, expr);
+            fprintf(g->fc, "\t\t\tcontinue;\n");
         }
         return;
     case CF_TYPE_FLOAT:
@@ -780,12 +1208,62 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
     case CF_TYPE_BYTES:
     case CF_TYPE_FREQUENCY:
     case CF_TYPE_RATIO:
-        fprintf(g->fc,
+        {
+            const cf_qgroup_t *qg = qgroup_for(expr->base);
+            fprintf(g->fc,
                 "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
-                "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n"
-                "\t\t\tout->%s = (uint64_t)strtoul(val, NULL, 0);\n"
-                "\t\t\tcontinue;\n",
-                e->long_name, e->struct_path);
+                "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n",
+                e->long_name);
+            if (g->file->schema_version >= 2U && qg != NULL) {
+                char unitcond[CF_MAX_MEMBERS * 256];
+                char gup[CF_MAX_IDENT_LEN];
+                unsigned int uu;
+                str_upper(gup, qg->gname, sizeof(gup));
+                unitcond[0] = '\0';
+                for (uu = 0U; uu < expr->nunits; uu++) {
+                    char uup[16];
+                    char term[256];
+                    str_upper(uup, expr->units[uu], sizeof(uup));
+                    (void)snprintf(term, sizeof(term),
+                                   "%scf__q.unit == %s_%s_%s",
+                                   (uu == 0U) ? "" : " || ",
+                                   g->PREFIX, gup, uup);
+                    (void)strncat(unitcond, term,
+                                  sizeof(unitcond) - strlen(unitcond) - 1U);
+                }
+                if (expr->nunits > 0U) {
+                    fprintf(g->fc,
+                        "\t\t\t{ struct %s_%s cf__q;\n"
+                        "\t\t\tif (cf__parse_%s(val, &cf__q) == 0 && (%s)) "
+                        "out->%s = cf__q;\n",
+                        g->prefix, qg->gname, qg->gname, unitcond,
+                        e->struct_path);
+                } else {
+                    fprintf(g->fc,
+                        "\t\t\t{ struct %s_%s cf__q;\n"
+                        "\t\t\tif (cf__parse_%s(val, &cf__q) == 0) "
+                        "out->%s = cf__q;\n",
+                        g->prefix, qg->gname, qg->gname, e->struct_path);
+                }
+                if (on_error_warn(g, e->opt)) {
+                    fprintf(g->fc,
+                        "\t\t\telse { fprintf(stderr, \"warning: --%s: bad value '%%s' "
+                        "(keeping default)\\n\", val); } }\n",
+                        e->long_name);
+                } else {
+                    fprintf(g->fc,
+                        "\t\t\telse { fprintf(stderr, \"error: --%s: bad value '%%s'\\n\", "
+                        "val); return -1; } }\n",
+                        e->long_name);
+                }
+                fprintf(g->fc, "\t\t\tcontinue;\n");
+            } else {
+                fprintf(g->fc,
+                    "\t\t\tout->%s = (uint64_t)strtoul(val, NULL, 0);\n"
+                    "\t\t\tcontinue;\n",
+                    e->struct_path);
+            }
+        }
         return;
     case CF_TYPE_CHOICE:
         /* inline/resolved choice -- if original was alias, emit enum comparisons */
@@ -805,10 +1283,8 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
                         (m3 == 0U) ? "" : "else ",
                         expr->members[m3], e->struct_path, eval3);
             }
-            fprintf(g->fc,
-                    "\t\t\telse { fprintf(stderr, \"error: invalid value for --%s: %%s\\n\", val); return -1; }\n"
-                    "\t\t\tcontinue;\n",
-                    e->long_name);
+            emit_choice_else(g, e->opt, e->long_name,
+                             expr->members, expr->nmembers);
         } else {
             /* inline choice: accept as integer */
             fprintf(g->fc,
@@ -828,6 +1304,28 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
             opt_c_name(acname4, opt->type.alias_name, sizeof(acname4));
             nt4 = find_named_type(g->file, opt->type.alias_name);
             if (nt4 != NULL) {
+                if (g->file->schema_version >= 2U) {
+                    if (opt->multiple.enabled && opt->multiple.max > 1U) {
+                        fprintf(g->fc,
+                            "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
+                            "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n"
+                            "\t\t\tif (out->%s_count < %u) {\n"
+                            "\t\t\tstruct %s_%s *rec = &out->%s[out->%s_count++];\n",
+                            e->long_name, e->struct_path, opt->multiple.max,
+                            g->prefix, acname4, e->struct_path, e->struct_path);
+                        emit_typed_compound_parse(g, nt4, "rec->");
+                        fprintf(g->fc, "\t\t\t}\n\t\t\tcontinue;\n");
+                    } else {
+                        char racc4[CF_MAX_IDENT_LEN * 2 + 8];
+                        fprintf(g->fc,
+                            "\t\t\tval = cf__next_arg(&i, argc, argv);\n"
+                            "\t\t\tif (!val) { fprintf(stderr, \"error: --%s requires argument\\n\"); return -1; }\n",
+                            e->long_name);
+                        (void)snprintf(racc4, sizeof(racc4), "out->%s.", e->struct_path);
+                        emit_typed_compound_parse(g, nt4, racc4);
+                        fprintf(g->fc, "\t\t\tcontinue;\n");
+                    }
+                } else {
                 if (opt->multiple.enabled && opt->multiple.max > 1U) {
                     unsigned int maxn4 = opt->multiple.max;
                     fprintf(g->fc,
@@ -871,6 +1369,7 @@ static void emit_value_parser(gen_ctx_t *g, const flat_opt_t *e)
                     }
                     fprintf(g->fc, "\t\t\tcf__parse_compound(val, cf__f_, %u); }\n\t\t\tcontinue;\n",
                             (unsigned int)nt4->expr.nfields);
+                }
                 }
                 return;
             }
@@ -980,6 +1479,20 @@ static void fmt_help_default(char *buf, unsigned int bufsz,
     }
 }
 
+/* Build a " (units: us|ms|s)" hint for a quantity option's help line. */
+static void fmt_units_hint(char *buf, unsigned int sz, const cf_type_expr_t *e)
+{
+    unsigned int u;
+    buf[0] = '\0';
+    if (e->nunits == 0U) return;
+    cf_strlcpy(buf, " (units: ", sz);
+    for (u = 0U; u < e->nunits; u++) {
+        if (u > 0U) (void)strncat(buf, "|", sz - strlen(buf) - 1U);
+        (void)strncat(buf, e->units[u], sz - strlen(buf) - 1U);
+    }
+    (void)strncat(buf, ")", sz - strlen(buf) - 1U);
+}
+
 static void gen_source(gen_ctx_t *g)
 {
     flat_list_t  fl;
@@ -1022,6 +1535,9 @@ static void gen_source(gen_ctx_t *g)
         "\tif (*i + 1 < argc && argv[*i + 1][0] != '-') { (*i)++; return argv[*i]; }\n"
         "\treturn NULL;\n"
         "}\n\n");
+
+    gen_quantity_defs(g);
+
     if (g->has_compound) {
         fprintf(g->fc,
             "static void cf__parse_compound(const char *s, cf__kv_t *fields, unsigned int nfields)\n"
@@ -1277,6 +1793,12 @@ static void gen_source(gen_ctx_t *g)
                 c_str_escape(ehelp_, sizeof(ehelp_),
                              (opt2->help[0] != '\0') ? opt2->help : "");
                 c_str_escape(edflt_, sizeof(edflt_), dflt_);
+                if (g->file->schema_version >= 2U && ex_->nunits > 0U) {
+                    char uh_[80];
+                    fmt_units_hint(uh_, sizeof(uh_), ex_);
+                    (void)strncat(ehelp_, uh_,
+                                  sizeof(ehelp_) - strlen(ehelp_) - 1U);
+                }
                 fprintf(g->fc,
                         "\tfputs(\"  %s --%-20s %-8s %s%s\\n\", stdout);\n",
                         sopt2, opt2->name, hint_, ehelp_, edflt_);
@@ -1304,6 +1826,12 @@ static void gen_source(gen_ctx_t *g)
             c_str_escape(ehelp_, sizeof(ehelp_),
                          (opt2->help[0] != '\0') ? opt2->help : "");
             c_str_escape(edflt_, sizeof(edflt_), dflt_);
+            if (g->file->schema_version >= 2U && ex_->nunits > 0U) {
+                char uh_[80];
+                fmt_units_hint(uh_, sizeof(uh_), ex_);
+                (void)strncat(ehelp_, uh_,
+                              sizeof(ehelp_) - strlen(ehelp_) - 1U);
+            }
             fprintf(g->fc,
                     "\tfputs(\"  %s --%-20s %-8s %s%s\\n\", stdout);\n",
                     sopt2, opt2->name, hint_, ehelp_, edflt_);
@@ -1418,6 +1946,11 @@ static void gen_source(gen_ctx_t *g)
             "void %s_cmdline_dump(const struct %s_cmdline *args)\n"
             "{\n",
             g->prefix, g->prefix);
+    if (g->file->schema_version >= 2U) {
+        /* harmless under v2: guarantees `args` is used even when every
+         * option is a compound printed as a placeholder. */
+        fprintf(g->fc, "\t(void)args;\n");
+    }
 
     for (i = 0U; i < (unsigned int)fl.n; i++) {
         const flat_opt_t  *e    = &fl.entries[i];
@@ -1455,6 +1988,17 @@ static void gen_source(gen_ctx_t *g)
         } else if (expr->base == CF_TYPE_DOUBLE) {
             fprintf(g->fc, "\tfprintf(stdout, \"%s=%%g\\n\", args->%s);\n",
                     e->long_name, e->struct_path);
+        } else if ((expr->base == CF_TYPE_DURATION ||
+                    expr->base == CF_TYPE_BYTES ||
+                    expr->base == CF_TYPE_FREQUENCY) &&
+                   g->file->schema_version >= 2U &&
+                   qgroup_for(expr->base) != NULL) {
+            const cf_qgroup_t *qg = qgroup_for(expr->base);
+            fprintf(g->fc,
+                    "\tfprintf(stdout, \"%s=%%lu %s\\n\", "
+                    "(unsigned long)%s_%s_to_%s(&args->%s));\n",
+                    e->long_name, qg->to_suffix,
+                    g->prefix, qg->gname, qg->to_suffix, e->struct_path);
         } else {
             fprintf(g->fc, "\tfprintf(stdout, \"%s=%%ld\\n\", (long)args->%s);\n",
                     e->long_name, e->struct_path);
@@ -1703,5 +2247,5 @@ int cf_generate(const cf_schema_file_t *file, const cf_gen_options_t *opts)
     }
 
     (void)rc;
-    return 0;
+    return g.had_error ? -1 : 0;
 }

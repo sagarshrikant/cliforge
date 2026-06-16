@@ -1,0 +1,70 @@
+@schema cliforge v2
+
+/*!
+ *  v2_features — a small, domain-neutral schema that demonstrates the
+ *  features added in cliforge 0.4.0 (all gated behind @schema cliforge v2).
+ *
+ *  Generate with:   cliforge v2_features.cf -o gen/
+ *
+ *  Feature map:
+ *    - on-error (meta default + per-option override)   [meta, --retries]
+ *    - unit-aware quantity types + conversion helpers   [--timeout, spec.period]
+ *    - units [..] restriction + help display            [--timeout]
+ *    - numeric range enforcement                        [--retries, spec.level]
+ *    - named choice with upper-cased enum constants     [verbosity_t, mode]
+ *    - typed fields inside a compound record            [spec]
+ */
+meta {
+    app      = "v2demo"
+    brief    = "Demonstrates cliforge 0.4.0 (v2) features"
+    prefix   = "v2"
+    output   = "cmdline"
+    on-error = exit          // project-wide default policy on bad input
+}
+
+/* Named choice types — generated enum constants are fully upper-cased,
+ * e.g. V2_MODE_SAFE, V2_VERBOSITY_T_NORMAL. */
+mode        = (fast, safe, debug)
+verbosity_t = (quiet, normal, loud)
+
+/* A compound record with typed fields.  In v2 each field keeps its real
+ * type: level -> uint8 (range-checked), mode -> the enum, period -> a
+ * { value, unit } duration struct, size -> a { value, unit } bytes struct. */
+spec = {
+    level  : uint8 in 0..9
+    mode   : mode
+    period : duration
+    size   : bytes
+}
+
+section "Options" {
+    /* named choice + default -> V2_VERBOSITY_T_NORMAL */
+    option verbosity {
+        type    = verbosity_t
+        default = normal
+        help    = "Output verbosity"
+    }
+
+    /* quantity option: unit restricted to ms/s and shown in --help;
+     * default 250ms must use a listed unit (checked at generate time).
+     * v2_duration_to_ns(&args.timeout) converts on demand. */
+    option timeout {
+        type    = duration units [ms, s]
+        default = 250ms
+        help    = "Overall timeout"
+    }
+
+    /* range-checked integer; on a bad value, warn + clamp instead of failing */
+    option retries {
+        type     = uint8 in 0..5
+        default  = 1
+        on-error = warn
+        help     = "Retry count"
+    }
+
+    /* compound option:  --job level=3,mode=safe,period=2s,size=4MiB */
+    option job {
+        type = spec
+        help = "Job specification"
+    }
+}

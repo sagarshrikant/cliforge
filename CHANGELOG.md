@@ -7,6 +7,71 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] — 2026-06-16
+
+Minor release adding declarative validation and a richer typed schema. All new
+schema syntax is gated behind `@schema cliforge v2`; `v1` schemas keep their
+exact 0.3.x behaviour (generated output is byte-for-byte unchanged). The
+generator accepts both `v1` and `v2`. Design notes: `docs/design/0.4.0-plan.md`.
+
+### Added
+
+- **`@schema cliforge v2`** — the generator reads `vN` generically and gates the
+  features below on the declared version.
+
+- **Unit-aware quantity types are now fully generated (v2).** A `duration`,
+  `bytes`, or `frequency` option/field generates a typed `struct { uint64_t
+  value; enum …_unit unit; }`, a unit enum, and a base-unit conversion helper
+  (`<prefix>_duration_to_ns`, `<prefix>_bytes_to_bytes`,
+  `<prefix>_frequency_to_hz`). The unit suffix is parsed and preserved; e.g.
+  `--timeout=30s` yields `value=30, unit=S` and `..._to_ns()` returns
+  `30000000000`. (In v1 these remain plain `uint64_t` with the suffix dropped.)
+
+- **`units [ … ]` restriction + display (v2).** A quantity type may list its
+  accepted unit suffixes (`period : duration units [us, ms, s]`). Disallowed
+  units are rejected at parse time, the accepted set is shown in `--help`, and a
+  default that uses a non-listed unit is rejected at generate time.
+
+- **`on-error = exit | warn` (v2).** Per-option validation-failure policy with a
+  project-wide default in `meta { on-error = … }` (built-in default `exit`).
+  `exit` makes the parser report and return non-zero; `warn` reports, keeps the
+  default / clamps, and continues. Generated code never calls `exit()` itself.
+
+- **Numeric range enforcement (v2).** `in lo..hi` and `max =` on integer options
+  now emit runtime bounds checks that apply the `on-error` policy
+  (`error: --opt out of range (lo..hi)`); v1 leaves ranges unenforced.
+
+- **Typed quantity/choice fields inside compound records (v2).** A field such as
+  `period : duration` or `sched : sched_t` in a `name = { … }` compound now
+  generates the real typed storage (quantity struct / enum / sized int) instead
+  of an untyped placeholder, with matching per-field parsing — for single and
+  repeatable (`multiple`) records alike.
+
+### Fixed
+
+- **Generated enum constants are now fully upper-cased** — `CC_VERBOSITY_QUIET`
+  instead of `CC_verbosity_QUIET`; the `typedef` keeps its lower-case form
+  (`cc_verbosity` / `cc_verbosity_t`). Fix in `cf_gen.c` `enum_val()`.
+
+- **Latent buffer overflow for a named-choice field inside a compound** (the
+  enum field was written as a string) is corrected under v2 via parse-into-temp
+  then enum match.
+
+### Changed
+
+- **Inline choice as a compound field** now reports a clear, actionable error
+  pointing to the named-choice form (`kind = (a,b,c)` then `field : kind`),
+  instead of a confusing parse error.
+
+### Tests
+
+- New system tests: `st_v2_generated_code_c{89,99,11}` (the v2 feature schema
+  compiles clean under all three standards) and `st_v2_behavior` (end-to-end
+  parse, quantity conversion, enum defaults, range-warn clamping, and unit
+  rejection). Suite is green at 92 tests.
+
+---
+
 ## [0.3.0] — 2026-06-07
 
 ### Added
@@ -156,6 +221,7 @@ cliforge uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CMake build system with `CLIFORGE_BUILD_TESTS` and `CLIFORGE_COVERAGE` options.
 - GTest unit-test suites for `cf_lex`, `cf_parse`, `cf_gen`, and `cf_util`.
 
+[0.4.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/shrikant-sagar/cliforge/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/shrikant-sagar/cliforge/releases/tag/v0.1.0

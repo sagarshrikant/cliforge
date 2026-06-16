@@ -59,6 +59,8 @@ export const QUALIFIER_KEYS = new Set<string>([
     "note",
     "example",
     "since",
+    "on-error",
+    "units",
 ]);
 
 /** Meta-block keys. */
@@ -72,6 +74,7 @@ export const META_KEYS = new Set<string>([
     "doc-title",
     "description",
     "i18n",
+    "on-error",
 ]);
 
 /** `required` qualifier values. */
@@ -135,6 +138,7 @@ export const RESERVED_KEYWORDS = new Set<string>([
     "type", "short", "default", "required", "visible", "multiple",
     "alias", "depends-on", "conflicts", "allowed", "sensitive", "deprecated",
     "display-unit", "unique", "help", "details", "note", "example", "since",
+    "on-error", "units",
     // Meta keys
     "app", "brief", "version", "author", "prefix", "output",
     "doc-title", "description",
@@ -204,6 +208,8 @@ export const KEYWORD_DOCS: Record<string, string> = {
     "sensitive":    "When `true`, the value is replaced with `***` in `cmdline_dump()` and passed as NULL to any logging callback. Use for tokens, passwords, keys.",
     "deprecated":   "Triggers a stderr warning when used. Value is the message shown to the user.",
     "display-unit": "Override the unit label shown in `--help` for quantity types (e.g. show `ms` instead of the stored `ns`).",
+    "on-error":     "**Validation-failure policy (v2).** `exit` (default) makes the generated parser report the error and return non-zero; `warn` reports a warning, keeps the option's default (or clamps a numeric to the nearest bound), and continues. A project-wide default can be set with `meta { on-error = ... }`.",
+    "units":        "**Accepted unit suffixes (v2).** Restricts a quantity type to a subset of its units, e.g. `duration units [us, ms, s]`. Disallowed units are rejected at parse time, the allowed set is shown in `--help`, and a default whose unit is not listed is rejected at generate time.",
     "unique":       "When `true`, reject duplicate values in a repeatable option (`multiple = N`). The generated parser checks for repeated identical arguments.",
     "help":         "Short one-line help text shown in `--help` output.",
     "details":      "Extended description shown in `--help-detail` and written to `cmdline.md`.",

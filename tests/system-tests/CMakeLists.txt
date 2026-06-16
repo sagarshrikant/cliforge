@@ -104,3 +104,30 @@ foreach(STD 89 99 11)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/st_generated_code/compile_generated.cmake
     )
 endforeach()
+
+# ---------------------------------------------------------------------------
+# st_v2 — v2 features: generated code compiles under C89/C99/C11 ...
+# ---------------------------------------------------------------------------
+foreach(STD 89 99 11)
+    set(_OUT "${ST_OUTPUT_DIR}/st_v2_code/c${STD}")
+    add_system_test(st_v2_generated_code_c${STD}
+        COMMAND ${CMAKE_COMMAND}
+            -DCLIFORGE_BIN=${CLIFORGE_BINARY}
+            -DGCC_BIN=${GCC_PATH}
+            -DSCHEMA_FILE=${FIXTURE_DIR}/v2_features.cf
+            -DOUT_DIR=${_OUT}
+            -DCSTD=${STD}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/st_generated_code/compile_generated.cmake
+    )
+endforeach()
+
+# ... and behave correctly at runtime (parse, conversion, on-error, units).
+add_system_test(st_v2_behavior
+    COMMAND ${CMAKE_COMMAND}
+        -DCLIFORGE_BIN=${CLIFORGE_BINARY}
+        -DGCC_BIN=${GCC_PATH}
+        -DSCHEMA_FILE=${FIXTURE_DIR}/v2_features.cf
+        -DDRIVER=${CMAKE_CURRENT_SOURCE_DIR}/st_v2_features/driver.c
+        -DOUT_DIR=${ST_OUTPUT_DIR}/st_v2_behavior
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/st_v2_features/run_v2.cmake
+)

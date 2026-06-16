@@ -149,3 +149,7 @@ section "Network" {
 
 See `app.cf`, `libio.cf`, and `libfilt.cf` for the full feature set, and
 `../../docs/spec/SPEC.md` for the complete language reference.
+
+## v2 feature demo
+
+`v2_features.cf` is a small, self-contained schema that demonstrates the cliforge 0.4.0 features (require `@schema cliforge v2`): unit-aware quantity types with conversion helpers, `units [..]` restriction, `on-error = exit|warn`, numeric range enforcement, upper-cased enum constants, and typed fields inside a compound record. Generate it with `cliforge v2_features.cf -o gen/` and inspect the typed `struct`s and `v2_*_to_*()` helpers in `gen/cmdline.h`.

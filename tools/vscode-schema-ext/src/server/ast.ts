@@ -236,6 +236,7 @@ export interface TypeExpr extends NodeBase {
     args: TypeArg[];
     /** Inline `in lo..hi` constraint that may follow a type. */
     rangeConstraint?: RangeExpr;
+    units?: string[];
 }
 
 export interface TypeArg extends NodeBase {
